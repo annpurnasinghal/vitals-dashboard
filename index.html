@@ -7116,8 +7116,9 @@ function ghSetSync(s, msg) {
   pill.title = s === 'err' ? 'Click to retry' : '';
 }
 
+const GH_SYNC_DEFAULT = 'https://raw.githubusercontent.com/vitals-drugs/vitals-dashboard/main/vitals_state.json';
 async function autoSyncFromGitHub() {
-  const url = sessionStorage.getItem('vt_gh_url');
+  const url = sessionStorage.getItem('vt_gh_url') || GH_SYNC_DEFAULT;
   if (!url) return;
   ghSetSync('syncing', '🔄 Syncing…');
   try {
@@ -7153,15 +7154,16 @@ async function autoSyncFromGitHub() {
   }
 }
 
-// Inject GitHub Auto-Sync card whenever the Data Management tab renders
+// Inject GitHub Auto-Sync card only when renderDataManagement() runs
 (function(){
-  const groups=document.getElementById('groups');
-  if(!groups) return;
-  new MutationObserver(()=>{
+  const _orig = window.renderDataManagement;
+  window.renderDataManagement = function() {
+    _orig.apply(this, arguments);
     if(document.getElementById('ghSyncCard')) return;
-    const dash=groups.querySelector('.dash');
+    const gc=document.getElementById('groups');
+    const dash=gc&&gc.querySelector('.dash');
     if(!dash) return;
-    const savedUrl=(sessionStorage.getItem('vt_gh_url')||'').replace(/"/g,'&quot;');
+    const savedUrl=(sessionStorage.getItem('vt_gh_url')||GH_SYNC_DEFAULT).replace(/"/g,'&quot;');
     const card=document.createElement('div');
     card.className='dash-card'; card.id='ghSyncCard';
     card.innerHTML=
@@ -7191,7 +7193,7 @@ async function autoSyncFromGitHub() {
       sessionStorage.setItem('vt_gh_url',val);
       autoSyncFromGitHub();
     };
-  }).observe(groups,{childList:true});
+  };
 })();
 
 init().then(autoSyncFromGitHub);
