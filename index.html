@@ -909,6 +909,7 @@
     <button class="sb-toggle" id="sbToggle">☰</button>
     <div class="vitals" id="vitals" style="display:none"></div>
     <span class="sync-pill" id="syncPill" style="display:none;margin-left:auto"></span>
+    <button id="ghSyncRefreshBtn" onclick="autoSyncFromGitHub()" title="Refresh sync" style="display:none;margin-left:6px;background:none;border:none;cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;border-radius:4px;color:inherit;opacity:.7" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">🔄</button>
   </div>
   <div class="page-title-bar" id="pageTitleBar"></div>
   <div class="hint" id="storageHint"></div>
@@ -7114,15 +7115,17 @@ function ghSetSync(s, msg) {
   pill.style.display = 'flex';
   pill.onclick = s === 'err' ? autoSyncFromGitHub : null;
   pill.title = s === 'err' ? 'Click to retry' : '';
+  const btn = document.getElementById('ghSyncRefreshBtn');
+  if (btn) btn.style.display = s === 'syncing' ? 'none' : 'inline-block';
 }
 
-const GH_SYNC_DEFAULT = 'https://raw.githubusercontent.com/vitals-drugs/vitals-dashboard/main/vitals_state.json';
+const GH_SYNC_DEFAULT = 'https://raw.githubusercontent.com/annpurnasinghal/vitals-dashboard/main/vitals_state.json';
 async function autoSyncFromGitHub() {
   const url = sessionStorage.getItem('vt_gh_url') || GH_SYNC_DEFAULT;
   if (!url) return;
   ghSetSync('syncing', '🔄 Syncing…');
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(url, {cache:'no-store'});
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const json = await resp.json();
     if (typeof json !== 'object' || !json) throw new Error('Invalid JSON');
