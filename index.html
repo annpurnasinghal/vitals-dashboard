@@ -900,7 +900,6 @@
     <button class="sb-help" id="changeLogBtn" title="View recent changes this session">🕐 Recent changes</button>
     <button class="sb-help" id="glossaryBtn" title="Help — glossary of terms">? Help / Glossary</button>
     <span class="save-pill" id="savePill"><span class="dot" id="saveDot"></span><span id="saveTxt">Saved</span></span>
-    <span class="sync-pill" id="syncPill" style="display:none"></span>
   </div>
 </aside>
 <!-- Main content -->
@@ -909,6 +908,7 @@
   <div class="head-wrap">
     <button class="sb-toggle" id="sbToggle">☰</button>
     <div class="vitals" id="vitals" style="display:none"></div>
+    <span class="sync-pill" id="syncPill" style="display:none;margin-left:auto"></span>
   </div>
   <div class="page-title-bar" id="pageTitleBar"></div>
   <div class="hint" id="storageHint"></div>
@@ -7170,17 +7170,26 @@ async function autoSyncFromGitHub() {
         '<div class="dm-icon">🔗</div>'+
         '<div class="dm-body">'+
           '<div class="dm-name">Raw JSON URL</div>'+
-          '<div class="dm-desc">Paste the raw GitHub (or any public) URL of an exported state JSON. The dashboard will silently re-import it on every page load.</div>'+
-          '<input id="ghUrlInput" type="url" placeholder="https://raw.githubusercontent.com/…/state.json" value="'+savedUrl+'"'+
+          '<div class="dm-desc">Paste the raw GitHub URL of your exported state JSON. Once saved, the dashboard silently re-imports it on every page load with no further action needed.</div>'+
+          '<input id="ghUrlInput" type="url" placeholder="https://raw.githubusercontent.com/..." value="'+savedUrl+'"'+
           ' style="margin-top:8px;width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:inherit;font-size:13px">'+
         '</div>'+
-        '<button class="btn primary dm-btn" id="ghSyncSaveBtn">Save &amp; Sync</button>'+
+        '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">'+
+          '<button class="btn primary dm-btn" id="ghSyncSaveBtn">Save</button>'+
+          '<button class="btn dm-btn" id="ghTestBtn">Test Connection</button>'+
+        '</div>'+
       '</div>';
     dash.appendChild(card);
     document.getElementById('ghSyncSaveBtn').onclick=()=>{
       const val=(document.getElementById('ghUrlInput').value||'').trim();
-      if(val){ sessionStorage.setItem('vt_gh_url',val); autoSyncFromGitHub(); }
+      if(val){ sessionStorage.setItem('vt_gh_url',val); ghSetSync('ok','✅ URL saved'); setTimeout(()=>{ const p=document.getElementById('syncPill'); if(p&&p.textContent==='✅ URL saved') p.style.display='none'; },2000); }
       else { sessionStorage.removeItem('vt_gh_url'); const p=document.getElementById('syncPill'); if(p) p.style.display='none'; }
+    };
+    document.getElementById('ghTestBtn').onclick=()=>{
+      const val=(document.getElementById('ghUrlInput').value||'').trim();
+      if(!val){ alert('Enter a URL first'); return; }
+      sessionStorage.setItem('vt_gh_url',val);
+      autoSyncFromGitHub();
     };
   }).observe(groups,{childList:true});
 })();
