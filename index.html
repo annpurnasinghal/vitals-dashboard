@@ -960,6 +960,7 @@
   </div>
   <div id="subtabs" class="subtabs-bar"></div>
   <div id="filterStrip"></div>
+  <div id="oosSeasonBar" style="display:none;padding:0 16px 4px 16px"></div>
   <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
   <input type="file" id="priceInput" accept=".xlsx,.xls" style="display:none">
   <input type="file" id="quotesInput" accept=".xlsx,.xls,.csv" style="display:none">
@@ -2109,6 +2110,27 @@ function seasonalFactor(m){
   }
   return {f:1, label:""};
 }
+function oosReason(m){
+  const series=seriesOf(m)||[];
+  const total13m=series.reduce((a,b)=>a+(+b||0),0);
+  const last3m=series.slice(-3).reduce((a,b)=>a+(+b||0),0);
+  const sf=seasonalFactor(m);
+  const isWinter=m._seasonLabel==='Winter peak';
+  const isSummer=m._seasonLabel==='Summer peak';
+  const inPeak=sf.f>1;
+  const period=MONTH_LABELS[0]+'–'+MONTH_LABELS[MONTH_LABELS.length-1];
+  if(total13m===0){
+    if(isWinter&&!inPeak) return {label:'❄️ Zero sales — off-season (Winter)',colour:'#0D47A1',bg:'#E3F2FD',urgency:1};
+    if(isSummer&&!inPeak) return {label:'☀️ Zero sales — off-season (Summer)',colour:'#E65100',bg:'#FFF8E1',urgency:1};
+    return {label:'🔴 Zero sales '+period+' — investigate',colour:'#B71C1C',bg:'#FFEBEE',urgency:3};
+  }
+  if(isWinter&&!inPeak) return {label:'❄️ Off-season (Winter Peak) — low demand expected',colour:'#0D47A1',bg:'#E3F2FD',urgency:1};
+  if(isSummer&&!inPeak) return {label:'☀️ Off-season (Summer Peak) — low demand expected',colour:'#E65100',bg:'#FFF8E1',urgency:1};
+  if(isWinter&&inPeak)  return {label:'❄️ Peak season OOS — reorder urgently',colour:'#B71C1C',bg:'#FFEBEE',urgency:3};
+  if(isSummer&&inPeak)  return {label:'☀️ Peak season OOS — reorder urgently',colour:'#B71C1C',bg:'#FFEBEE',urgency:3};
+  if(last3m===0)        return {label:'⚠️ No sales last 3 months — demand issue?',colour:'#5D4037',bg:'#EFEBE9',urgency:2};
+  return {label:'🔴 Active demand — reorder immediately',colour:'#B71C1C',bg:'#FFEBEE',urgency:3};
+}
 function smartReorder(m){
   // 1. baseline demand — canonical forecast (rolling 12mo, censored-demand aware,
   //    recency-weighted). Same figure velDay()/recentVelMonth() report, so every
@@ -2549,6 +2571,8 @@ let _tvCurList   = [];
 let _tvLastTab   = null;
 let _tvChartOpen = true;
 let _tvDensity   = 'compact';
+let _oosFilterSales  = 'ALL';
+let _oosFilterSeason = 'ALL';
 
 function tvToggle(){
   _tableView = !_tableView;
@@ -2595,6 +2619,8 @@ function tvCellVal(m, key){
   if(key==='velTier')     return (m.velTier||'').replace(' (13mo)','');
   if(key==='highValue')   return m._high?'Yes':'';
   if(key==='topCustomer') return m.topCustomer||'';
+  if(key==='sales13m')    return (seriesOf(m)||[]).reduce((a,b)=>a+(+b||0),0);
+  if(key==='oosReason')   return oosReason(m).urgency;
   return '';
 }
 
@@ -2638,6 +2664,22 @@ function tvGetCols(){
     {key:'reorderQty', label:'Reorder Qty',     sort:'reorderQty', w:10, num:true},
     {key:'bonus',      label:'Bonus',           sort:'bonus',      w:14},
     {key:'remark',     label:'Action',          sort:'remark',     w:16},
+  ];
+  if(activeTab==='OUT OF STOCK'||activeTab==='LOW STOCK') return [
+    {key:'name',       label:'Medicine',        sort:'name',       w:35},
+    {key:'status',     label:'Status',          sort:'status',     w:14, isStatus:true},
+    {key:'stock',      label:'Stock',           sort:'stock',      w:8,  num:true},
+    {key:'daysCover',  label:'Days Cover',      sort:'daysCover',  w:9,  num:true},
+    {key:'margin',     label:'Margin %',        sort:'margin',     w:9,  num:true},
+    {key:'vel',        label:'Vel /mo',         sort:'vel',        w:10, num:true},
+    {key:'price',      label:'Price AED',       sort:'price',      w:9,  num:true},
+    {key:'reorderQty', label:'Reorder Qty',     sort:'reorderQty', w:10, num:true},
+    {key:'supplier',   label:'Supplier',        sort:'supplier',   w:22},
+    {key:'remark',     label:'Action Taken',    sort:'remark',     w:16},
+    {key:'expiry',     label:'Expiry',          sort:'expiry',     w:14},
+    {key:'salt',       label:'Salt/INN',        sort:'salt',       w:22},
+    {key:'sales13m',   label:'Sales ('+MONTH_LABELS[0]+'–'+MONTH_LABELS[MONTH_LABELS.length-1]+')', sort:'sales13m', w:12, num:true},
+    {key:'oosReason',  label:'Reason / Seasonality', sort:'urgency', w:28},
   ];
   return [
     {key:'name',       label:'Medicine',        sort:'name',       w:35},
@@ -2749,6 +2791,97 @@ function tvBuildSummaryChart(rows, cols){
     </div>
     ${rightHtml}
   </div>`;
+}
+
+function applyOosFilters(list){
+  if(_oosFilterSales!=='ALL'){
+    list=list.filter(m=>{
+      const s=seriesOf(m)||[];
+      const t=s.reduce((a,b)=>a+(+b||0),0);
+      const l3=s.slice(-3).reduce((a,b)=>a+(+b||0),0);
+      if(_oosFilterSales==='ZERO')     return t===0;
+      if(_oosFilterSales==='NORECENT') return t>0&&l3===0;
+      if(_oosFilterSales==='HAS')      return t>0;
+      return true;
+    });
+  }
+  if(_oosFilterSeason!=='ALL'){
+    list=list.filter(m=>{
+      const rz=oosReason(m);
+      if(_oosFilterSeason==='WINTER')   return rz.label.includes('Off-season')&&rz.label.includes('Winter');
+      if(_oosFilterSeason==='SUMMER')   return rz.label.includes('Off-season')&&rz.label.includes('Summer');
+      if(_oosFilterSeason==='NOREASON') return !rz.label.toLowerCase().includes('season');
+      if(_oosFilterSeason==='PEAK')     return rz.label.includes('Peak season OOS');
+      return true;
+    });
+  }
+  return list;
+}
+function renderOosFilterBar(containerId, list){
+  const el=document.getElementById(containerId); if(!el) return;
+  const pill=(label,val,cur,fn)=>{
+    const active=val===cur;
+    const base='padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid;margin:2px 3px 2px 0;';
+    const style=active?base+'background:#0c7c7c;color:#fff;border-color:#0c7c7c':base+'background:#fff;color:var(--ink,#1e293b);border-color:var(--line,#dde3ea)';
+    return `<button style="${style}" onclick="${fn}('${val}');render()">${label}</button>`;
+  };
+  const ps=pill('All','ALL',_oosFilterSales,'_oosFilterSales=')
+    +pill('Zero sales','ZERO',_oosFilterSales,'_oosFilterSales=')
+    +pill('No recent sales','NORECENT',_oosFilterSales,'_oosFilterSales=')
+    +pill('Has sales','HAS',_oosFilterSales,'_oosFilterSales=');
+  const ss=pill('All','ALL',_oosFilterSeason,'_oosFilterSeason=')
+    +pill('❄️ Off-season Winter','WINTER',_oosFilterSeason,'_oosFilterSeason=')
+    +pill('☀️ Off-season Summer','SUMMER',_oosFilterSeason,'_oosFilterSeason=')
+    +pill('🔴 No seasonal reason','NOREASON',_oosFilterSeason,'_oosFilterSeason=')
+    +pill('⚠️ Peak season OOS','PEAK',_oosFilterSeason,'_oosFilterSeason=');
+  const tab=activeTab;
+  const fname=tab==='OUT OF STOCK'?'Vitals_OOS_Report':'Vitals_LowStock_Report';
+  el.innerHTML=`<div style="background:var(--panel,#fff);border:1px solid var(--line,#dde3ea);border-radius:8px;padding:10px 14px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+      <span style="font-size:11px;font-weight:600;color:var(--muted,#64748b);white-space:nowrap">Sales in period:</span>
+      ${ps}
+      <span style="flex:1"></span>
+      <button onclick="oosExportExcel('${tab}')" style="padding:5px 12px;border-radius:6px;background:#0c7c7c;color:#fff;border:none;cursor:pointer;font-size:11px;font-weight:600">⬇ Export</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:11px;font-weight:600;color:var(--muted,#64748b);white-space:nowrap">Seasonality:</span>
+      ${ss}
+    </div>
+  </div>`;
+}
+
+function oosExportExcel(tab){
+  const period=MONTH_LABELS[0]+'–'+MONTH_LABELS[MONTH_LABELS.length-1];
+  const list=applyOosFilters(meds.filter(m=>inTab(m,tab)));
+  if(!list.length){ alert('No rows to export.'); return; }
+  const headers=['Medicine Name','Salt/INN','Stock Status','Current Stock','Days Cover','Margin %',
+    'Sales ('+period+')','Last 3 Months Sales','OOS Reason','Season','Supplier','Bin','Smart Reorder Qty'];
+  const dataRows=list.map(m=>{
+    const sr=smartReorder(m); const series=seriesOf(m)||[];
+    const t13=series.reduce((a,b)=>a+(+b||0),0); const l3=series.slice(-3).reduce((a,b)=>a+(+b||0),0);
+    const rz=oosReason(m); const sup=suppliersOf(m);
+    return [m.name||'', m.salt||'', statusOf(m)||'', stockOf(m)??'', daysCoverDynamic(m)!=null?Math.round(daysCoverDynamic(m)):'',
+      marginPctOf(m)!=null?+marginPctOf(m).toFixed(1):'', t13, l3, rz.label,
+      m._seasonLabel||'Year-round', sup.length?(sup[0].supplier||''):(m.supplier||''), m.bin||'', sr?sr.qty:''];
+  });
+  const ws=XLSX.utils.aoa_to_sheet([headers,...dataRows]);
+  // Colour the OOS Reason column (col index 8, letter I)
+  list.forEach((m,i)=>{
+    const rz=oosReason(m); const cell=ws['I'+(i+2)];
+    if(cell){ cell.s={ fill:{patternType:'solid',fgColor:{rgb:rz.bg.replace('#','')}}, font:{bold:false,color:{rgb:rz.colour.replace('#','')}}}; }
+  });
+  // Bold header, freeze row 1, auto-filter
+  const hdrRange='A1:M1';
+  for(let c=0;c<headers.length;c++){
+    const addr=XLSX.utils.encode_cell({r:0,c}); if(ws[addr]) ws[addr].s={font:{bold:true}};
+  }
+  ws['!freeze']={xSplit:0,ySplit:1};
+  ws['!autofilter']={ref:'A1:M1'};
+  ws['!cols']=headers.map((_,i)=>({wch:[30,22,14,10,10,10,14,14,36,16,22,10,14][i]||12}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,tab==='OUT OF STOCK'?'OOS Report':'Low Stock Report');
+  const date=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,(tab==='OUT OF STOCK'?'Vitals_OOS_Report_':'Vitals_LowStock_Report_')+date+'.xlsx');
 }
 
 function renderTableView(list){
@@ -2906,6 +3039,16 @@ function renderTableView(list){
               <span style="width:5px;height:5px;border-radius:50%;background:${sc.dot};flex-shrink:0"></span>${esc(lbl)}
             </span></td>`;
         }
+        if(c.key==='sales13m'){
+          const s13=(seriesOf(m)||[]).reduce((a,b)=>a+(+b||0),0);
+          const vel13=recentVelMonth(m)||0;
+          const sc13=s13===0?'#B71C1C':s13<vel13?'#E65100':'#1B5E20';
+          return `<td style="padding:${cp};height:${rh}px;text-align:right;font-variant-numeric:tabular-nums;color:${sc13};border-right:1px solid #f0f4f7;white-space:nowrap;font-size:${fs}">${s13.toLocaleString()}</td>`;
+        }
+        if(c.key==='oosReason'){
+          const rz=oosReason(m);
+          return `<td style="padding:${cp};height:${rh}px;text-align:left;border-right:1px solid #f0f4f7;font-size:${fs}"><span style="background:${rz.bg};color:${rz.colour};padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;white-space:nowrap">${rz.label}</span></td>`;
+        }
         const v=tvCellVal(m,c.key); const empty=v===''||v==null;
         const disp=empty?'<span style="color:#e2e8f0">—</span>':esc(String(fmtNum(v,c.key)));
         return `<td style="padding:${cp};height:${rh}px;${c.num?'text-align:right;font-variant-numeric:tabular-nums':'text-align:left'};color:${empty?'#e2e8f0':'#1e293b'};border-right:1px solid #f0f4f7;white-space:nowrap;font-size:${fs}">${disp}</td>`;
@@ -2950,11 +3093,14 @@ function render(){
   const tabDef=TABS.find(t=>t.id===activeTab)||{icon:"",label:""};
   const cnt=activeTab!=="DASHBOARD"?tabCount(activeTab):0;
   const ptb=document.getElementById("pageTitleBar");
-  if(activeTab!==_tvLastTab){ _tvSortCol=null; _tvSortDir=1; _tvFilter=''; _tvLastTab=activeTab; }
+  if(activeTab!==_tvLastTab){ _tvSortCol=null; _tvSortDir=1; _tvFilter=''; _tvLastTab=activeTab; if(activeTab==='OUT OF STOCK'||activeTab==='LOW STOCK'){ _tableView=true; } else { _oosFilterSales='ALL'; _oosFilterSeason='ALL'; } }
   if(isDash){ ptb.innerHTML=`<div class="ptb"><span class="ptb-icon">📊</span><span class="ptb-title">Dashboard</span><span class="ptb-sub">Executive overview</span><span style="flex:1"></span>${tvPill()}</div>`; }
   else if(isDataMgmt){ ptb.innerHTML=`<div class="ptb"><span class="ptb-icon">📥</span><span class="ptb-title">Data Management</span><span class="ptb-sub">Import, update, and back up your data</span></div>`; }
   else if(isStockInquiry){ ptb.innerHTML=`<div class="ptb"><span class="ptb-icon">🔍</span><span class="ptb-title">Stock Inquiry</span><span class="ptb-sub">Bulk-match any list against live stock</span></div>`; }
   else { ptb.innerHTML=`<div class="ptb"><span class="ptb-icon">${tabDef.icon||''}</span><span class="ptb-title">${tabDef.label||activeTab}</span><span class="ptb-cnt">${cnt.toLocaleString()} medicines</span><span style="flex:1"></span>${tvPill()}</div>`; }
+  const isOosTab=activeTab==='OUT OF STOCK'||activeTab==='LOW STOCK';
+  const sb=document.getElementById('oosSeasonBar');
+  if(sb){ if(isOosTab){ sb.style.display='block'; renderOosFilterBar('oosSeasonBar',meds.filter(m=>inTab(m,activeTab))); } else { sb.style.display='none'; } }
   // context-specific toolbar visibility
   document.getElementById("tableCard").style.display = (isBoard||isDataMgmt||isStockInquiry||(isDash&&!drillFilter)) ? "none" : "";
   document.getElementById("board").style.display = isBoard ? "grid" : "none";
@@ -3016,7 +3162,12 @@ function render(){
     else list=list.filter(m=>remarkOf(m)===actionFilterVal);
   }
   list = applySort(applyColFilters(metricFilter(highFilter(bySupplierFilter(list)))));
-  if(_tableView){ renderTableView(list); return; }
+  if(_tableView){
+    const tvList=isOosTab?applyOosFilters(list):list;
+    renderTableView(tvList);
+    return;
+  }
+  if(isOosTab) list=applyOosFilters(list);
   const total=list.length;
   const pages=Math.max(1,Math.ceil(total/PAGE_SIZE));
   if(page>pages) page=pages;
@@ -7122,10 +7273,10 @@ function ghSetSync(s, msg) {
 const GH_SYNC_DEFAULT = 'https://raw.githubusercontent.com/annpurnasinghal/vitals-dashboard/main/vitals_state.json';
 async function autoSyncFromGitHub() {
   const url = sessionStorage.getItem('vt_gh_url') || GH_SYNC_DEFAULT;
-  if (!url) return;
   ghSetSync('syncing', '🔄 Syncing…');
   try {
-    const resp = await fetch(url, {cache:'no-store'});
+    const bustUrl = url + '?t=' + Date.now();
+    const resp = await fetch(bustUrl, {cache:'no-store'});
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const json = await resp.json();
     if (typeof json !== 'object' || !json) throw new Error('Invalid JSON');
@@ -7368,7 +7519,26 @@ function siHandleFile(file) {
       sel.innerHTML = cols.map(c => `<option value="${c}">${c}</option>`).join('');
 
       // Auto-select best column
-      const auto = cols.find(c => /name|item|medicine|product|drug/i.test(c)) || cols[0];
+      // 1. Skip columns whose header is purely numeric, or where >30% of values are numeric
+      const isNumericCol = c => {
+        if (/^\d+$/.test(String(c))) return true;
+        const vals = rows.map(r => String(r[c]||'').trim()).filter(v => v);
+        if (!vals.length) return true;
+        return vals.filter(v => v !== '' && !isNaN(v)).length / vals.length > 0.30;
+      };
+      const validCols = cols.filter(c => !isNumericCol(c));
+      const candidates = validCols.length ? validCols : cols;
+      // 2. Prefer header containing known keywords (also adds 'description')
+      const PRIORITY_RE = /name|item|medicine|product|drug|description/i;
+      const auto = candidates.find(c => PRIORITY_RE.test(c)) || (() => {
+        // 3. Fallback: column with the longest average string length
+        let best = candidates[0], bestAvg = 0;
+        candidates.forEach(c => {
+          const avg = rows.reduce((s, r) => s + String(r[c]||'').length, 0) / rows.length;
+          if (avg > bestAvg) { best = c; bestAvg = avg; }
+        });
+        return best;
+      })();
       sel.value = auto;
 
       document.getElementById('siFileInfo').textContent =
@@ -7520,6 +7690,8 @@ let _siDensity      = localStorage.getItem('vt_si_density') || 'comfortable';
 let _siColWidths    = (function(){ try{return JSON.parse(localStorage.getItem('vt_si_col_widths')||'{}')}catch(e){return{}} })();
 let _siEnabledCols  = null;
 let _siSelectedRows = new Set();
+let _siColFilters = {};
+let _siActiveColFilters = new Set();
 
 // ─── CSS INJECTION ────────────────────────────────────────────────────────────
 function siInjectCss() {
@@ -7613,22 +7785,63 @@ function siInjectCss() {
     '#siEmptyState{text-align:center;padding:60px 20px;color:var(--muted,#64748b);display:none}',
     '#siEmptyState h3{margin:0 0 6px;font-size:16px;color:var(--ink,#1e293b)}',
     '#siEmptyState p{margin:0;font-size:13px}',
-    '.si-xp{padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:18px}',
-    '.si-xp h4{margin:0 0 7px;font-size:11px;font-weight:700;color:#0D3B66;text-transform:uppercase;letter-spacing:.06em}',
-    '.si-xf{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line,#eff3f7);font-size:12px;gap:10px}',
-    '.si-xf .xl{color:var(--muted,#64748b);flex-shrink:0}',
+    '#siExpandPanel{position:fixed;bottom:0;left:220px;right:0;z-index:300;background:var(--panel,#fff);border-top:2px solid #0c7c7c;box-shadow:0 -4px 24px rgba(0,0,0,.15);transform:translateY(100%);transition:transform .25s ease}',
+    '#siExpandPanel.open{transform:translateY(0)}',
+    '.si-ep-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--line,#eff3f7);background:#f8fafc;font-weight:600;font-size:14px;color:var(--ink,#1e293b)}',
+    '.si-ep-hdr button{background:none;border:none;cursor:pointer;font-size:22px;color:var(--muted,#64748b);line-height:1;padding:0 4px;flex-shrink:0}',
+    '.si-ep-hdr button:hover{color:var(--ink,#1e293b)}',
+    '.si-ep-body{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:16px 20px;max-height:45vh;overflow-y:auto}',
+    '.si-ep-body > div{min-width:0;overflow:hidden}',
+    '.si-ep-body h4{margin:0 0 7px;font-size:11px;font-weight:700;color:#0D3B66;text-transform:uppercase;letter-spacing:.06em}',
+    '.si-ep-foot{display:flex;gap:12px;padding:10px 20px;border-top:1px solid var(--line,#eff3f7);background:#f8fafc}',
+    '.si-ep-foot button{padding:7px 14px;border:1px solid var(--line,#dde3ea);border-radius:6px;cursor:pointer;font-size:11.5px;font-family:inherit;font-weight:600;background:var(--panel,#fff);color:var(--ink,#1e293b)}',
+    '.si-ep-foot button:hover{border-color:#0c7c7c;color:#0c7c7c;background:#e6f4f4}',
+    '.si-xf{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line,#eff3f7);font-size:12px;gap:10px;align-items:baseline}',
+    '.si-xf .xl{min-width:130px;flex-shrink:0;color:var(--muted,#64748b)}',
     '.si-xf .xv{font-weight:600;color:var(--ink,#1e293b);text-align:right}',
-    '.si-xat table{width:100%;border-collapse:collapse;font-size:11.5px}',
-    '.si-xat th{background:#1a3a4a;color:#fff;padding:5px 7px;text-align:left;font-size:10.5px;font-weight:700;text-transform:uppercase}',
-    '.si-xat td{padding:5px 7px;border-bottom:1px solid var(--line,#eff3f7)}',
-    '.si-xbs{display:flex;gap:7px;margin-top:12px;grid-column:1/-1}',
-    '.si-xbs button{flex:1;padding:7px 10px;border:1px solid var(--line,#dde3ea);border-radius:6px;cursor:pointer;font-size:11.5px;font-family:inherit;font-weight:600;background:var(--panel,#fff);color:var(--ink,#1e293b)}',
-    '.si-xbs button:hover{border-color:#0c7c7c;color:#0c7c7c;background:#e6f4f4}',
+    '.si-xat{overflow-x:auto;margin-top:8px}',
+    '.si-xat table{width:100%;border-collapse:collapse;font-size:11px}',
+    '.si-xat th,.si-xat td{padding:5px 8px;text-align:left;border-bottom:1px solid var(--line,#eff3f7)}',
+    '.si-xat th{background:#1a3a4a;color:#fff;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:0.05em}',
+    '.si-xat td:nth-child(1){width:40%}',
+    '.si-xat td:nth-child(2){width:20%}',
+    '.si-xat td:nth-child(3){width:20%}',
+    '.si-xat td:nth-child(4){width:20%}',
     '.si-moa{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;display:flex;align-items:center;justify-content:center}',
     '.si-mo{background:var(--panel,#fff);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.25);max-width:720px;width:95vw;padding:24px;position:relative;max-height:90vh;overflow-y:auto}',
     '.si-moc{position:absolute;top:14px;right:16px;background:none;border:none;cursor:pointer;font-size:22px;color:var(--muted,#64748b);line-height:1}',
     '.si-rh{position:absolute;right:0;top:0;width:5px;height:100%;cursor:col-resize;z-index:1}',
     '.si-rh:hover,.si-rh.drag{background:rgba(255,255,255,.3)}',
+    '#siActiveFilterStrip{display:none;background:#F0F4FF;border-bottom:1px solid var(--line,#e0e7ef);padding:6px 14px 4px;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px}',
+    '.si-col-chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #0c7c7c;border-radius:20px;padding:3px 10px;font-size:11px;color:#0c7c7c;font-weight:600;white-space:nowrap}',
+    '.si-col-chip button{background:none;border:none;cursor:pointer;padding:0 0 0 2px;color:#0c7c7c;font-size:13px;line-height:1;font-weight:700}',
+    '.si-col-chip button:hover{color:#ef4444}',
+    '.si-clrall-col{background:none;border:none;cursor:pointer;font-size:11px;color:#0c7c7c;font-weight:700;padding:3px 6px;text-decoration:underline;margin-left:auto}',
+    '.si-cfb{background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.45);font-size:10px;padding:0 2px;line-height:1;vertical-align:middle;flex-shrink:0;border-radius:3px;transition:color .15s}',
+    '.si-cfb:hover{color:rgba(255,255,255,0.95);background:rgba(255,255,255,0.12)}',
+    '.si-cfb.active{color:#5fffea !important;font-weight:bold}',
+    '.si-cfpan{position:fixed;background:var(--panel,#fff);border:1px solid var(--line,#dde3ea);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:220px;max-height:320px;z-index:500;padding:0;overflow:hidden;display:flex;flex-direction:column}',
+    '.si-cfph{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#1a3a4a;color:#dde9f0;font-size:12px;font-weight:600;flex-shrink:0}',
+    '.si-cfph button{background:none;border:none;color:#dde9f0;cursor:pointer;font-size:16px;line-height:1;padding:0;opacity:.7}',
+    '.si-cfph button:hover{opacity:1}',
+    '.si-cfshort{border-bottom:1px solid var(--line,#dde3ea);flex-shrink:0}',
+    '.si-cfshort button{display:block;width:100%;text-align:left;padding:6px 12px;background:none;border:none;font-size:11.5px;cursor:pointer;color:var(--ink,#1e293b);font-family:inherit}',
+    '.si-cfshort button:hover{background:var(--faint,#f0f4f8)}',
+    '.si-cfbody{flex:1;overflow-y:auto;padding:8px 12px;min-height:60px}',
+    '.si-cffoot{display:flex;gap:8px;padding:8px 12px;border-top:1px solid var(--line,#dde3ea);background:var(--faint,#f8fafc);flex-shrink:0}',
+    '.si-cffoot button{flex:1;padding:5px 10px;border-radius:6px;border:1px solid var(--line,#dde3ea);cursor:pointer;font-size:11.5px;font-weight:600;font-family:inherit;background:var(--panel,#fff);color:var(--ink,#1e293b)}',
+    '.si-cffoot button.apply{background:#0c7c7c;color:#fff;border-color:#0c7c7c}',
+    '.si-cffoot button.apply:hover{background:#0a6666}',
+    '.si-cfchklist{max-height:140px;overflow-y:auto;border:1px solid var(--line,#dde3ea);border-radius:6px;margin-top:4px}',
+    '.si-cfchklist label{display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:11.5px;cursor:pointer;color:var(--ink,#1e293b)}',
+    '.si-cfchklist label:hover{background:var(--faint,#f0f4f8)}',
+    '.si-cfchklist input[type=checkbox]{accent-color:#0c7c7c;cursor:pointer;flex-shrink:0}',
+    '.si-cfsearch{width:100%;padding:5px 8px;border:1px solid var(--line,#dde3ea);border-radius:6px;font-size:11.5px;box-sizing:border-box;font-family:inherit;margin-bottom:4px}',
+    '.si-cfsearch:focus{outline:none;border-color:#0c7c7c}',
+    '.si-cfrange{display:flex;flex-direction:column;gap:4px}',
+    '.si-cfrange label{display:flex;align-items:center;gap:6px;font-size:11.5px}',
+    '.si-cfrange input{flex:1;padding:5px 8px;border:1px solid var(--line,#dde3ea);border-radius:6px;font-size:11.5px;box-sizing:border-box;font-family:inherit}',
+    '.si-cfrange input:focus{outline:none;border-color:#0c7c7c}',
   ].join('\n');
   document.head.appendChild(s);
 }
@@ -7702,6 +7915,29 @@ function siApplyAllFilters() {
       return _siSupFilter.has(sup);
     });
   }
+  if (_siActiveColFilters.size > 0) {
+    filtered = filtered.filter(function(r) {
+      return Array.from(_siActiveColFilters).every(function(key) {
+        var cf = _siColFilters[key];
+        if (!cf) return true;
+        var val = siGetColVal(r, key);
+        if (cf.type === 'list') {
+          return cf.values.size === 0 || cf.values.has(String(val || '—'));
+        }
+        if (cf.type === 'range') {
+          var n = parseFloat(val);
+          if (isNaN(n)) return true;
+          if (cf.min !== '' && !isNaN(parseFloat(cf.min)) && n < parseFloat(cf.min)) return false;
+          if (cf.max !== '' && !isNaN(parseFloat(cf.max)) && n > parseFloat(cf.max)) return false;
+          return true;
+        }
+        if (cf.type === 'text') {
+          return String(val).toLowerCase().includes(cf.value.toLowerCase());
+        }
+        return true;
+      });
+    });
+  }
   var pinnedRows = filtered.filter(function(r){ return r.matched && _siPinnedIds.has(r.matched.id); });
   var unpinned   = filtered.filter(function(r){ return !r.matched || !_siPinnedIds.has(r.matched.id); });
   unpinned = siSortResultsFn(unpinned);
@@ -7711,6 +7947,7 @@ function siApplyAllFilters() {
   siRenderTable(displayRows, search);
   siUpdateSummaryBar(filtered);
   siUpdateFilterStrip();
+  siUpdateActiveFilterStrip();
 }
 
 // ─── SORT HELPER ─────────────────────────────────────────────────────────────
@@ -7808,6 +8045,182 @@ function siClearAllFilters() {
   _siStatusFilter=new Set(['ALL']); _siSeasonFilter=new Set(['ALL']); _siVelFilter=new Set(['ALL']); _siSupFilter=new Set(['ALL']);
   var se=document.getElementById('siSearch'); if(se) se.value='';
   siSyncAllDdCbx(); siApplyAllFilters();
+}
+
+// ─── COLUMN-LEVEL FILTERS ─────────────────────────────────────────────────────
+function siColFilterType(key) {
+  var cats = ['status','velTier','ddcStatus','highValue','topSalesperson','supplier','manufacturer','form','remark'];
+  var nums = ['stock','price','margin','daysCover','regPrice','priceVsMoh','salesValue','salesQty','monthlyVel','trendPct','numCust','smartReorderQty','last1m','last3m','last6m','score'];
+  if (cats.indexOf(key) >= 0) return 'list';
+  if (nums.indexOf(key) >= 0) return 'range';
+  return 'text';
+}
+function siGetColVal(r, key) {
+  if (key === 'name') return r.inputName || (r.matched ? r.matched.name : '') || '';
+  var v = r[key];
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') return v.name || '';
+  return v;
+}
+function siCloseColFilter() {
+  var pan = document.getElementById('siColFilterPan');
+  if (pan) pan.remove();
+  if (window._siColFilterOutside) {
+    document.removeEventListener('click', window._siColFilterOutside, true);
+    window._siColFilterOutside = null;
+  }
+}
+function siColFltSort(key, dir) { _siSortBy=key; _siSortDir=dir; siCloseColFilter(); siApplyAllFilters(); }
+function siColFltSearch(inp) {
+  var q = inp.value.toLowerCase();
+  var list = document.getElementById('siCfCkList');
+  if (!list) return;
+  list.querySelectorAll('label').forEach(function(lbl){ lbl.style.display = lbl.textContent.toLowerCase().includes(q) ? '' : 'none'; });
+}
+function siColFltSelectAll(cb) {
+  var list = document.getElementById('siCfCkList');
+  if (!list) return;
+  list.querySelectorAll('input[type=checkbox]').forEach(function(c){ c.checked = cb.checked; });
+}
+function siColFltClear(key) {
+  delete _siColFilters[key]; _siActiveColFilters.delete(key);
+  siCloseColFilter(); siApplyAllFilters(); siUpdateActiveFilterStrip();
+}
+function siColFltApply(key, type) {
+  if (type === 'list') {
+    var allCks = document.querySelectorAll('#siCfCkList .si-cfck');
+    var chkd   = document.querySelectorAll('#siCfCkList .si-cfck:checked');
+    if (!allCks.length || chkd.length === allCks.length || chkd.length === 0) {
+      delete _siColFilters[key]; _siActiveColFilters.delete(key);
+    } else {
+      var vals = new Set(); chkd.forEach(function(c){ vals.add(c.value); });
+      _siColFilters[key] = { type: 'list', values: vals }; _siActiveColFilters.add(key);
+    }
+  } else if (type === 'range') {
+    var minEl=document.getElementById('siCfMin'), maxEl=document.getElementById('siCfMax');
+    var minV=minEl?minEl.value.trim():'', maxV=maxEl?maxEl.value.trim():'';
+    if (minV===''&&maxV==='') { delete _siColFilters[key]; _siActiveColFilters.delete(key); }
+    else { _siColFilters[key]={type:'range',min:minV,max:maxV}; _siActiveColFilters.add(key); }
+  } else {
+    var textEl=document.getElementById('siCfText');
+    var textV=textEl?textEl.value.trim():'';
+    if (!textV) { delete _siColFilters[key]; _siActiveColFilters.delete(key); }
+    else { _siColFilters[key]={type:'text',value:textV}; _siActiveColFilters.add(key); }
+  }
+  siCloseColFilter(); siApplyAllFilters(); siUpdateActiveFilterStrip();
+}
+function siOpenColFilter(event, key) {
+  siCloseColFilter();
+  var colDef = SI_COLS.find(function(c){ return c.key===key; }) || {key:key,label:key};
+  var label  = key==='name'?'Medicine':key==='status'?'Status':colDef.label;
+  var type   = siColFilterType(key);
+  var existing   = _siColFilters[key];
+  var allResults = window._siResults || [];
+  var trigEl = event.target.closest ? (event.target.closest('.si-cfb')||event.target) : event.target;
+  var rect   = trigEl.getBoundingClientRect();
+  var panX   = Math.max(4, Math.min(rect.left, window.innerWidth-244));
+  var panY   = rect.bottom + 4;
+  if (panY + 320 > window.innerHeight) panY = Math.max(4, rect.top - 324);
+  var pan = document.createElement('div');
+  pan.className='si-cfpan'; pan.id='siColFilterPan';
+  pan.style.left=panX+'px'; pan.style.top=panY+'px';
+  var sortHtml='<div class="si-cfshort">'+
+    '<button onclick="siColFltSort(\''+key+'\',\'asc\')">↑ Sort A→Z</button>'+
+    '<button onclick="siColFltSort(\''+key+'\',\'desc\')">↓ Sort Z→A</button>'+
+  '</div>';
+  var bodyHtml='';
+  if (type==='list') {
+    var valCounts={};
+    allResults.forEach(function(r){ var v=String(siGetColVal(r,key)||'—'); valCounts[v]=(valCounts[v]||0)+1; });
+    var vals=Object.keys(valCounts).sort();
+    var exVals=(existing&&existing.type==='list')?existing.values:null;
+    var allChk=!exVals||exVals.size===0;
+    var cbRows=vals.map(function(v){
+      var chk=allChk||exVals.has(v);
+      return '<label><input type="checkbox" class="si-cfck" value="'+v.replace(/"/g,'&quot;')+'"'+(chk?' checked':'')+'>'+
+        '<span>'+v+'</span><span style="color:#94a3b8;font-size:10px;margin-left:4px">('+valCounts[v]+')</span></label>';
+    }).join('');
+    bodyHtml='<div class="si-cfbody">'+
+      '<input class="si-cfsearch" type="text" placeholder="🔍 Search values…" oninput="siColFltSearch(this)">'+
+      '<label style="font-size:11px;display:flex;align-items:center;gap:6px;cursor:pointer;padding:2px 0">'+
+        '<input type="checkbox" '+(allChk?'checked':'')+' onchange="siColFltSelectAll(this)" style="accent-color:#0c7c7c"><strong>Select All</strong></label>'+
+      '<div class="si-cfchklist" id="siCfCkList">'+cbRows+'</div>'+
+    '</div>';
+  } else if (type==='range') {
+    var minV2=(existing&&existing.type==='range')?(existing.min||''):'';
+    var maxV2=(existing&&existing.type==='range')?(existing.max||''):'';
+    var numArr=allResults.map(function(r){ return parseFloat(siGetColVal(r,key)); }).filter(function(n){ return !isNaN(n); });
+    var dataMin=numArr.length?Math.min.apply(null,numArr):0;
+    var dataMax=numArr.length?Math.max.apply(null,numArr):0;
+    bodyHtml='<div class="si-cfbody"><div class="si-cfrange">'+
+      '<div style="font-size:10px;color:#64748b;margin-bottom:6px">Range: '+dataMin.toLocaleString()+' – '+dataMax.toLocaleString()+'</div>'+
+      '<label>Min: <input id="siCfMin" type="number" value="'+minV2+'" placeholder="'+Math.floor(dataMin)+'"></label>'+
+      '<label style="margin-top:6px">Max: <input id="siCfMax" type="number" value="'+maxV2+'" placeholder="'+Math.ceil(dataMax)+'"></label>'+
+    '</div></div>';
+  } else {
+    var textV2=(existing&&existing.type==='text')?existing.value:'';
+    bodyHtml='<div class="si-cfbody"><div class="si-cfrange">'+
+      '<label>Contains: <input id="siCfText" type="text" value="'+textV2.replace(/"/g,'&quot;')+'"></label>'+
+    '</div></div>';
+  }
+  pan.innerHTML=
+    '<div class="si-cfph"><span>'+label+'</span><button onclick="siCloseColFilter()">×</button></div>'+
+    sortHtml+bodyHtml+
+    '<div class="si-cffoot">'+
+      '<button onclick="siColFltClear(\''+key+'\')">Clear</button>'+
+      '<button class="apply" onclick="siColFltApply(\''+key+'\',\''+type+'\')">Apply</button>'+
+    '</div>';
+  document.body.appendChild(pan);
+  setTimeout(function(){
+    window._siColFilterOutside=function(e){
+      var p=document.getElementById('siColFilterPan');
+      if(p&&!p.contains(e.target)&&!(e.target.closest&&e.target.closest('.si-cfb'))) siCloseColFilter();
+    };
+    document.addEventListener('click',window._siColFilterOutside,true);
+  },0);
+}
+function siUpdateActiveFilterStrip() {
+  var strip=document.getElementById('siActiveFilterStrip');
+  if(!strip) return;
+  if(!_siActiveColFilters.size){ strip.style.display='none'; return; }
+  var html='';
+  if(!_siStatusFilter.has('ALL')) _siStatusFilter.forEach(function(v){
+    html+='<span class="si-col-chip">● Status: '+v+'<button onclick="siRemoveFilter(\'status\',\''+v.replace(/'/g,"\\'")+'\')" title="Remove">×</button></span>';
+  });
+  if(!_siSeasonFilter.has('ALL')) _siSeasonFilter.forEach(function(v){
+    html+='<span class="si-col-chip">🗓 Season: '+v+'<button onclick="siRemoveFilter(\'season\',\''+v.replace(/'/g,"\\'")+'\')" title="Remove">×</button></span>';
+  });
+  if(!_siVelFilter.has('ALL')) _siVelFilter.forEach(function(v){
+    html+='<span class="si-col-chip">⚡ Vel: '+v+'<button onclick="siRemoveFilter(\'vel\',\''+v.replace(/'/g,"\\'")+'\')" title="Remove">×</button></span>';
+  });
+  if(!_siSupFilter.has('ALL')) _siSupFilter.forEach(function(v){
+    html+='<span class="si-col-chip">🏭 '+v+'<button onclick="siRemoveFilter(\'sup\',\''+v.replace(/'/g,"\\'")+'\')" title="Remove">×</button></span>';
+  });
+  _siActiveColFilters.forEach(function(key){
+    var cf=_siColFilters[key]; if(!cf) return;
+    var colDef=SI_COLS.find(function(c){ return c.key===key; })||{label:key};
+    var colLabel=key==='name'?'Medicine':key==='status'?'Status':colDef.label;
+    var desc='';
+    if(cf.type==='list'){ var arr=Array.from(cf.values); desc=arr.length>2?arr.slice(0,2).join(', ')+'…':arr.join(', '); }
+    else if(cf.type==='range'){ desc=(cf.min!==''&&cf.max!=='')?cf.min+' – '+cf.max:cf.min!==''?'≥ '+cf.min:'≤ '+cf.max; }
+    else{ desc='"'+cf.value+'"'; }
+    html+='<span class="si-col-chip">📊 '+colLabel+': '+desc+'<button onclick="siColFltClear(\''+key+'\')" title="Remove">×</button></span>';
+  });
+  html+='<button class="si-clrall-col" onclick="siResetAllFilters()">Clear all filters</button>';
+  strip.style.display='flex'; strip.innerHTML=html;
+}
+function siResetAllFilters() {
+  _siColFilters={}; _siActiveColFilters=new Set();
+  _siStatusFilter=new Set(['ALL']); _siSeasonFilter=new Set(['ALL']);
+  _siVelFilter=new Set(['ALL']); _siSupFilter=new Set(['ALL']);
+  var se=document.getElementById('siSearch'); if(se) se.value='';
+  siSyncAllDdCbx();
+  ['siDdStB','siDdSnB','siDdVlB','siDdSpB'].forEach(function(id){
+    var btn=document.getElementById(id); if(!btn) return;
+    btn.classList.remove('hf');
+    var cnt=btn.querySelector('.si-dcnt'); if(cnt) cnt.style.display='none';
+  });
+  siApplyAllFilters();
 }
 function siSyncDdCbx(type, fs) {
   var panelId = {status:'siDdSt',season:'siDdSn',vel:'siDdVl',sup:'siDdSp'}[type];
@@ -7988,19 +8401,29 @@ function siRenderCell(r, col) {
   }
 }
 
-// ─── EXPANDED ROW HTML ────────────────────────────────────────────────────────
-function siXRowHtml(r, idx, colspan) {
-  var m=r.matched; if(!m) return '';
+// ─── EXPAND DETAIL PANEL ────────────────────────────────────────────────────────
+function siShowExpandPanel(r, idx) {
+  var m=r.matched; if(!m) return;
+  var fv=function(v){ return (v===null||v===undefined||v==='') ? '—' : String(v); };
+  var stock = r.stock!=null ? r.stock : (typeof stockOf==='function' ? stockOf(m) : null);
+  var vel   = r.monthlyVel || (typeof recentVelMonth==='function' ? recentVelMonth(m) : null);
+  var expiry= r.expiry     || (typeof expiryOf==='function'       ? expiryOf(m)       : null);
+  var tier  = m.velTier    || r.velTier;
   var fields=[
-    ['Input Name', r.inputName||'—'],['Matched Product', m.name||'—'],['Salt/INN', r.salt||'—'],
-    ['Supplier', r.supplier||'—'],['Sell Price', r.price?'AED '+parseFloat(r.price).toFixed(2):'—'],
-    ['Margin %', r.margin?(parseFloat(r.margin).toFixed(1)+'%'):'—'],
-    ['Current Stock', r.stock!=null?r.stock:'—'],['Days Cover', r.daysCover?(Math.round(r.daysCover)+'d'):'—'],
-    ['Monthly Velocity', r.monthlyVel?(r.monthlyVel+' units'):'—'],['Expiry', r.expiry||'—'],
-    ['Velocity Tier', r.velTier||'—'],['Match Confidence', (r.score||0)+'%'],
+    ['Input Name',       fv(r.inputName)],
+    ['Matched Product',  fv(m.name)],
+    ['Salt/INN',         fv(r.salt)],
+    ['Supplier',         fv(r.supplier)],
+    ['Sell Price',       r.price ? 'AED '+parseFloat(r.price).toFixed(2) : '—'],
+    ['Margin %',         (function(){ var mv=parseFloat(r.margin); if(!r.margin||isNaN(mv)) return '—'; if(mv>100) return '— (check data)'; return mv.toFixed(1)+'%'; })()],
+    ['Current Stock',    fv(stock)],
+    ['Days Cover',       r.daysCover ? Math.round(r.daysCover)+'d' : '—'],
+    ['Monthly Velocity', vel ? Math.round(parseFloat(vel)).toLocaleString()+' units/mo' : '—'],
+    ['Expiry',           fv(expiry)],
+    ['Velocity Tier',    fv(tier)],
+    ['Match Confidence', (r.score||0)+'%'],
   ];
-  var lft=fields.slice(0,6).map(function(f){ return '<div class="si-xf"><span class="xl">'+f[0]+'</span><span class="xv">'+f[1]+'</span></div>'; }).join('');
-  var rgt=fields.slice(6).map(function(f){ return '<div class="si-xf"><span class="xl">'+f[0]+'</span><span class="xv">'+f[1]+'</span></div>'; }).join('');
+  var mkF=function(f){ return '<div class="si-xf"><span class="xl">'+f[0]+'</span><span class="xv">'+f[1]+'</span></div>'; };
   var alts=[1,2,3,4,5].map(function(n){ return r['alt'+n]; }).filter(function(a){ return a&&a.name; });
   var altRows=alts.slice(0,4).map(function(a){
     var as2=typeof statusOf==='function'?statusOf(a):''; var stk2=typeof stockOf==='function'?stockOf(a):'—'; var pr2=typeof priceOf==='function'?(priceOf(a)||0).toFixed(2):'—';
@@ -8008,16 +8431,35 @@ function siXRowHtml(r, idx, colspan) {
     return '<tr><td>'+a.name+'</td><td style="color:'+ac2+';font-weight:600">'+as2+'</td><td>'+stk2+'</td><td>AED '+pr2+'</td></tr>';
   }).join('');
   var altTbl=alts.length?'<table><thead><tr><th>Name</th><th>Status</th><th>Stock</th><th>Price</th></tr></thead><tbody>'+altRows+'</tbody></table>':'<p style="font-size:12px;color:#94a3b8;margin:6px 0">No alternates found</p>';
-  return '<tr class="si-xr"><td colspan="'+colspan+'">'+
-    '<div class="si-xp">'+
-      '<div><h4>Details (left)</h4>'+lft+'</div>'+
-      '<div><h4>Details (right)</h4>'+rgt+'<h4 style="margin-top:10px">Alternates</h4><div class="si-xat">'+altTbl+'</div></div>'+
-      '<div class="si-xbs">'+
-        '<button onclick="siCtxExp('+idx+')">📤 Export Row</button>'+
-        '<button onclick="siCtxSales('+idx+')">📊 Sales Chart</button>'+
-        '<button onclick="siCtxDash(\''+( m.name||'').replace(/'/g,"\\'")+'\')">🔗 View in Dashboard</button>'+
-      '</div>'+
-    '</div></td></tr>';
+
+  var titleEl=document.getElementById('siEpTitle');
+  var leftEl=document.getElementById('siEpLeft');
+  var rightEl=document.getElementById('siEpRight');
+  var footEl=document.getElementById('siEpFoot');
+  if(!titleEl||!leftEl||!rightEl||!footEl) return;
+
+  titleEl.textContent = m.name || r.inputName || '';
+  leftEl.innerHTML = '<h4>Details</h4>'+fields.slice(0,6).map(mkF).join('');
+  rightEl.innerHTML = '<h4>More Details</h4>'+fields.slice(6).map(mkF).join('')+
+    '<h4 style="margin-top:10px">Alternates</h4><div class="si-xat">'+altTbl+'</div>';
+  footEl.innerHTML =
+    '<button onclick="siCtxExp('+idx+')">📤 Export Row</button>'+
+    '<button onclick="siCtxSales('+idx+')">📊 Sales Chart</button>'+
+    '<button onclick="siCtxDash(\''+( m.name||'').replace(/'/g,"\\'")+'\')">🔗 View in Dashboard</button>';
+
+  var ep=document.getElementById('siExpandPanel');
+  if(ep) ep.classList.add('open');
+  var wrap=document.getElementById('siTableWrap');
+  if(wrap) wrap.style.paddingBottom='50vh';
+}
+
+function siCloseExpanded() {
+  _siExpandedIdx = null;
+  var ep=document.getElementById('siExpandPanel');
+  if(ep) ep.classList.remove('open');
+  var wrap=document.getElementById('siTableWrap');
+  if(wrap) wrap.style.paddingBottom='';
+  siApplyAllFilters();
 }
 
 // ─── RESIZE HANDLE ─────────────────────────────────────────────────────────────
@@ -8211,6 +8653,7 @@ function siInitControls() {
         '</div>'+
       '</div>'+
     '</div>'+
+    '<div id="siActiveFilterStrip"></div>'+
     '<div id="siFilterStrip"></div>'+
     '<div id="siSummaryBar"></div>'+
     '<div id="siTableWrap" style="max-height:65vh">'+
@@ -8236,6 +8679,22 @@ function siInitControls() {
     document.body.appendChild(pan);
   }
 
+  // Create fixed expand detail panel (once)
+  if (!document.getElementById('siExpandPanel')) {
+    var ep2 = document.createElement('div'); ep2.id = 'siExpandPanel';
+    ep2.innerHTML =
+      '<div class="si-ep-hdr">'+
+        '<span id="siEpTitle" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:calc(100% - 60px)"></span>'+
+        '<button onclick="siCloseExpanded()" title="Close">×</button>'+
+      '</div>'+
+      '<div class="si-ep-body">'+
+        '<div id="siEpLeft"></div>'+
+        '<div id="siEpRight"></div>'+
+      '</div>'+
+      '<div class="si-ep-foot" id="siEpFoot"></div>';
+    document.body.appendChild(ep2);
+  }
+
   // Search handler
   var se = document.getElementById('siSearch');
   if (se) se.addEventListener('input', siApplyAllFilters);
@@ -8248,7 +8707,7 @@ function siInitControls() {
       if (!e.target.closest('.si-ctx') && !e.target.getAttribute('data-ctx')) siCloseCtxMenu();
     }, true);
     document.addEventListener('keydown', function(e){
-      if (e.key==='Escape'){ document.querySelectorAll('.si-ddp').forEach(function(p){p.style.display='none';}); siCloseColPanel(); siCloseCtxMenu(); }
+      if (e.key==='Escape'){ document.querySelectorAll('.si-ddp').forEach(function(p){p.style.display='none';}); siCloseColPanel(); siCloseCtxMenu(); siCloseExpanded(); siCloseColFilter(); }
     });
   }
 
@@ -8325,17 +8784,23 @@ function siRenderTable(displayRows, search) {
   var L0 = 0, L1 = 24, L2 = 24 + nameW;
 
   // ─── HEADER ───────────────────────────────────────────────────────────────
+  var _nameFlt=_siActiveColFilters.has('name'), _stFlt=_siActiveColFilters.has('status');
   var hdrHtml = '<tr>'+
     '<th style="width:24px;position:sticky;left:'+L0+'px;z-index:22;background:#1a3a4a;text-align:center">'+
       '<input type="checkbox" onchange="siToggleSelectAll(this.checked)" style="cursor:pointer;accent-color:#0c7c7c">'+
     '</th>'+
-    '<th class="si-fh'+(_siSortBy==='name'?' si-sa':'')+'" style="position:sticky;left:'+L1+'px;z-index:22;width:'+nameW+'px;min-width:'+nameW+'px" onclick="siSortCol(\'name\')" data-k="name">'+
+    '<th class="si-fh'+(_siSortBy==='name'?' si-sa':'')+'" style="position:sticky;left:'+L1+'px;z-index:22;width:'+nameW+'px;min-width:'+nameW+'px'+(_nameFlt?';background:rgba(12,124,124,0.25)':'')+'" onclick="siSortCol(\'name\')" data-k="name">'+
+      (_nameFlt?'<span style="color:#5fffea;font-size:9px;margin-right:1px">●</span>':'')+
       'Medicine <span class="si-si">'+(_siSortBy==='name'?(_siSortDir==='asc'?'↑':'↓'):'↕')+'</span>'+
+      '<button class="si-cfb'+(_nameFlt?' active':'')+'" onclick="event.stopPropagation();siOpenColFilter(event,\'name\')" title="Filter column">▼</button>'+
       '<div class="si-rh" onmousedown="siResizeStart(event,\'name\')" onclick="event.stopPropagation()"></div>'+
     '</th>'+
-    '<th class="si-fh'+(_siSortBy==='status'?' si-sa':'')+'" style="position:sticky;left:'+L2+'px;z-index:22;width:'+statusW+'px;min-width:'+statusW+'px" onclick="siSortCol(\'status\')" data-k="status">'+
+    '<th class="si-fh'+(_siSortBy==='status'?' si-sa':'')+'" style="position:sticky;left:'+L2+'px;z-index:22;width:'+statusW+'px;min-width:'+statusW+'px'+(_stFlt?';background:rgba(12,124,124,0.25)':'')+'" onclick="siSortCol(\'status\')" data-k="status">'+
+      (_stFlt?'<span style="color:#5fffea;font-size:9px;margin-right:1px">●</span>':'')+
       'Status <span class="si-si">'+(_siSortBy==='status'?(_siSortDir==='asc'?'↑':'↓'):'↕')+'</span>'+
-    '</th>';
+      '<button class="si-cfb'+(_stFlt?' active':'')+'" onclick="event.stopPropagation();siOpenColFilter(event,\'status\')" title="Filter column">▼</button>'+
+    '</th>'+
+    '<th style="width:32px;min-width:32px;background:#1a3a4a"></th>';
 
   activeCols.forEach(function(col) {
     var w = _siColWidths[col.key] || (col.w ? col.w*4 : 100);
@@ -8343,9 +8808,13 @@ function siRenderTable(displayRows, search) {
     if (col.key==='salesValue') lbl = 'Sales AED ('+period+')';
     if (col.key==='salesQty')   lbl = 'Sales Qty ('+period+')';
     var isSorted = _siSortBy===col.key;
-    hdrHtml += '<th class="'+(isSorted?'si-sa':'')+'" style="width:'+w+'px;min-width:'+w+'px" '+
+    var isFltd = _siActiveColFilters.has(col.key);
+    var thBg = isFltd ? ';background:rgba(12,124,124,0.25)' : '';
+    var dot  = isFltd ? '<span style="color:#5fffea;font-size:9px;margin-right:1px">●</span>' : '';
+    hdrHtml += '<th class="'+(isSorted?'si-sa':'')+'" style="width:'+w+'px;min-width:'+w+'px'+thBg+'" '+
       'onclick="siSortCol(\''+col.key+'\')" data-k="'+col.key+'" title="'+col.label+'">'+
-      lbl+' <span class="si-si">'+(isSorted?(_siSortDir==='asc'?'↑':'↓'):'↕')+'</span>'+
+      dot+lbl+' <span class="si-si">'+(isSorted?(_siSortDir==='asc'?'↑':'↓'):'↕')+'</span>'+
+      '<button class="si-cfb'+(isFltd?' active':'')+'" onclick="event.stopPropagation();siOpenColFilter(event,\''+col.key+'\')" title="Filter column">▼</button>'+
       '<div class="si-rh" onmousedown="siResizeStart(event,\''+col.key+'\')" onclick="event.stopPropagation()"></div>'+
     '</th>';
   });
@@ -8358,7 +8827,7 @@ function siRenderTable(displayRows, search) {
 
   displayRows.forEach(function(r) {
     if (r.__isGroup) {
-      var cs = activeCols.length + 4;
+      var cs = activeCols.length + 5;
       bodyHtml += '<tr class="si-grph"><td colspan="'+cs+'">▸ '+r.label+
         ' <span style="opacity:.6;font-weight:400">('+r.count+' items)</span></td></tr>';
       return;
@@ -8367,8 +8836,8 @@ function siRenderTable(displayRows, search) {
     var m = r.matched;
     var isPinned = m && _siPinnedIds.has(m.id);
     var dClass = _siDensity==='comfortable'?'si-tc':_siDensity==='compact'?'si-tk':'si-ts';
-    var rowBg = isPinned ? '#fffde7' : 'var(--panel,#fff)';
     var isExpanded = (_siExpandedIdx === idx);
+    var rowBg = isExpanded ? '#EFF6FF' : (isPinned ? '#fffde7' : 'var(--panel,#fff)');
 
     var nameText = m ? (m.name||r.inputName||'') : (r.inputName||'');
     var confBadge = '';
@@ -8378,7 +8847,7 @@ function siRenderTable(displayRows, search) {
     }
 
     var isSel = _siSelectedRows.has(idx);
-    bodyHtml += '<tr class="si-dr '+dClass+(isPinned?' si-pin':'')+(isSel?' si-sel':'')+'" data-idx="'+idx+'" onclick="siRowClick(event,'+idx+')">';
+    bodyHtml += '<tr class="si-dr '+dClass+(isPinned?' si-pin':'')+(isSel?' si-sel':'')+'" data-idx="'+idx+'" style="'+(isExpanded?'border-left:3px solid #0c7c7c':'')+'" onclick="siRowClick(event,'+idx+')">';
     // Checkbox
     bodyHtml += '<td class="si-fc" style="width:24px;text-align:center;position:sticky;left:'+L0+'px;z-index:11;background:'+rowBg+'">'+
       '<input type="checkbox" class="si-rck" data-idx="'+idx+'" '+(isSel?'checked':'')+' style="cursor:pointer;accent-color:#0c7c7c" onclick="event.stopPropagation();var i=parseInt(this.dataset.idx,10);_siSelectedRows[this.checked?\'add\':\'delete\'](i);this.closest(\'tr\').classList.toggle(\'si-sel\',this.checked)">'+
@@ -8390,6 +8859,13 @@ function siRenderTable(displayRows, search) {
     // Status (frozen)
     bodyHtml += '<td class="si-fc" style="position:sticky;left:'+L2+'px;z-index:11;background:'+rowBg+';width:'+statusW+'px;min-width:'+statusW+'px">'+
       siPillHtml(r.status)+
+    '</td>';
+    // Expand toggle
+    bodyHtml += '<td style="width:32px;min-width:32px;text-align:center;padding:0">'+
+      '<button style="background:none;border:1px solid var(--line,#dde3ea);border-radius:4px;width:24px;height:24px;cursor:pointer;font-size:10px;color:var(--muted,#64748b);display:inline-flex;align-items:center;justify-content:center" '+
+        'onclick="event.stopPropagation();siToggleExpand('+idx+')" title="'+(isExpanded?'Collapse':'Expand')+'">'+
+        (isExpanded?'▼':'▶')+
+      '</button>'+
     '</td>';
     // Data columns
     activeCols.forEach(function(col) {
@@ -8403,7 +8879,6 @@ function siRenderTable(displayRows, search) {
         'onclick="event.stopPropagation();siOpenCtxMenu(event,'+idx+')" data-ctx="1" title="Options">⋮</button>'+
     '</td></tr>';
 
-    if (isExpanded) bodyHtml += siXRowHtml(r, idx, activeCols.length + 4);
   });
 
   table.querySelector('tbody').innerHTML = bodyHtml;
@@ -8411,7 +8886,7 @@ function siRenderTable(displayRows, search) {
   // ─── FOOTER ───────────────────────────────────────────────────────────────
   var totStock = 0;
   visible.forEach(function(r){ totStock += (+r.stock||0); });
-  var ftHtml = '<tr><td></td><td colspan="2" style="font-size:11px">'+visible.length+' rows | Stock total: '+totStock.toLocaleString()+'</td>';
+  var ftHtml = '<tr><td></td><td colspan="3" style="font-size:11px">'+visible.length+' rows | Stock total: '+totStock.toLocaleString()+'</td>';
   activeCols.forEach(function(col){
     var w = _siColWidths[col.key]||(col.w?col.w*4:100);
     ftHtml += '<td style="width:'+w+'px"></td>';
@@ -8421,9 +8896,19 @@ function siRenderTable(displayRows, search) {
 }
 
 function siRowClick(e, idx) {
-  if (e.target.closest('button') || e.target.tagName==='INPUT' || e.target.closest('.si-xr')) return;
-  _siExpandedIdx = (_siExpandedIdx === idx) ? null : idx;
-  siApplyAllFilters();
+  if (e.target.closest('button') || e.target.tagName==='INPUT') return;
+}
+
+function siToggleExpand(idx) {
+  if (_siExpandedIdx === idx) {
+    siCloseExpanded();
+  } else {
+    _siExpandedIdx = idx;
+    var vis = window._siVisibleResults || [];
+    var r = vis[idx];
+    siApplyAllFilters();
+    if (r) siShowExpandPanel(r, idx);
+  }
 }
 
 function siRenderPreview() {
