@@ -99,6 +99,10 @@
   .subtabs-bar{margin-bottom:4px}
   .ctx-filter{} /* context filters shown/hidden by JS */
   .save-pill{font-size:11.5px;color:#a9cccc;display:flex;align-items:center;gap:7px}
+  .sync-pill{font-size:11.5px;display:flex;align-items:center;gap:5px}
+  .sync-pill.syncing{color:#7ac}
+  .sync-pill.ok{color:#3fbf8f}
+  .sync-pill.err{color:#e07070;cursor:pointer;text-decoration:underline dotted}
   .dot{width:7px;height:7px;border-radius:50%;background:#3fbf8f;box-shadow:0 0 0 3px rgba(63,191,143,.18)}
   .dot.mem{background:#e0a83a;box-shadow:0 0 0 3px rgba(224,168,58,.18)}
 
@@ -896,6 +900,7 @@
     <button class="sb-help" id="changeLogBtn" title="View recent changes this session">🕐 Recent changes</button>
     <button class="sb-help" id="glossaryBtn" title="Help — glossary of terms">? Help / Glossary</button>
     <span class="save-pill" id="savePill"><span class="dot" id="saveDot"></span><span id="saveTxt">Saved</span></span>
+    <span class="sync-pill" id="syncPill" style="display:none"></span>
   </div>
 </aside>
 <!-- Main content -->
@@ -7099,7 +7104,88 @@ async function init(){
   // sidebar toggle for mobile
   document.getElementById("sbToggle").onclick=()=>document.getElementById("sidebar").classList.toggle("open");
 }
-init();
+
+// ─── GITHUB AUTO-SYNC ────────────────────────────────────────────────────────
+function ghSetSync(s, msg) {
+  const pill = document.getElementById('syncPill');
+  if (!pill) return;
+  pill.className = 'sync-pill ' + s;
+  pill.textContent = msg;
+  pill.style.display = 'flex';
+  pill.onclick = s === 'err' ? autoSyncFromGitHub : null;
+  pill.title = s === 'err' ? 'Click to retry' : '';
+}
+
+async function autoSyncFromGitHub() {
+  const url = sessionStorage.getItem('vt_gh_url');
+  if (!url) return;
+  ghSetSync('syncing', '🔄 Syncing…');
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const json = await resp.json();
+    if (typeof json !== 'object' || !json) throw new Error('Invalid JSON');
+    // Apply as merge (matching applyState merge branch, no DOM dependency)
+    const ps = json;
+    state.remarks        = Object.assign({}, state.remarks,        ps.remarks||{});
+    state.statusOverrides= Object.assign({}, state.statusOverrides,ps.statusOverrides||{});
+    state.fields         = Object.assign({}, state.fields,         ps.fields||{});
+    const inc = ps.suppliers||{};
+    Object.entries(inc).forEach(([k,qs])=>{
+      if(!state.suppliers[k]) state.suppliers[k]=qs;
+      else qs.forEach(q=>{
+        const i=state.suppliers[k].findIndex(x=>(x.supplier||'').toLowerCase()===(q.supplier||'').toLowerCase());
+        if(i>=0) state.suppliers[k][i]=q; else state.suppliers[k].push(q);
+      });
+    });
+    const existKeys=new Set(state.newMeds.map(n=>n.key));
+    (ps.newMeds||[]).forEach(n=>{ if(!existKeys.has(n.key)) state.newMeds.push(n); });
+    if(ps.mrn) state.mrn=ps.mrn;
+    if(!state.lowThreshold && ps.lowThreshold) state.lowThreshold=ps.lowThreshold;
+    if(!state.leadTime     && ps.leadTime)     state.leadTime=ps.leadTime;
+    if(!state.targetCover  && ps.targetCover)  state.targetCover=ps.targetCover;
+    if(ps._emptySuppliers) state._emptySuppliers=[...new Set([...(state._emptySuppliers||[]),...ps._emptySuppliers])];
+    page=1; buildMeds(); scheduleSave(); render();
+    const t=new Date(); const hh=String(t.getHours()).padStart(2,'0'), mm=String(t.getMinutes()).padStart(2,'0');
+    ghSetSync('ok', '✅ Synced '+hh+':'+mm);
+  } catch(e) {
+    ghSetSync('err', '⚠ Sync failed — click to retry');
+  }
+}
+
+// Inject GitHub Auto-Sync card whenever the Data Management tab renders
+(function(){
+  const groups=document.getElementById('groups');
+  if(!groups) return;
+  new MutationObserver(()=>{
+    if(document.getElementById('ghSyncCard')) return;
+    const dash=groups.querySelector('.dash');
+    if(!dash) return;
+    const savedUrl=(sessionStorage.getItem('vt_gh_url')||'').replace(/"/g,'&quot;');
+    const card=document.createElement('div');
+    card.className='dash-card'; card.id='ghSyncCard';
+    card.innerHTML=
+      '<h3>🔄 GitHub Auto-Sync</h3>'+
+      '<div class="dm-row">'+
+        '<div class="dm-icon">🔗</div>'+
+        '<div class="dm-body">'+
+          '<div class="dm-name">Raw JSON URL</div>'+
+          '<div class="dm-desc">Paste the raw GitHub (or any public) URL of an exported state JSON. The dashboard will silently re-import it on every page load.</div>'+
+          '<input id="ghUrlInput" type="url" placeholder="https://raw.githubusercontent.com/…/state.json" value="'+savedUrl+'"'+
+          ' style="margin-top:8px;width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:inherit;font-size:13px">'+
+        '</div>'+
+        '<button class="btn primary dm-btn" id="ghSyncSaveBtn">Save &amp; Sync</button>'+
+      '</div>';
+    dash.appendChild(card);
+    document.getElementById('ghSyncSaveBtn').onclick=()=>{
+      const val=(document.getElementById('ghUrlInput').value||'').trim();
+      if(val){ sessionStorage.setItem('vt_gh_url',val); autoSyncFromGitHub(); }
+      else { sessionStorage.removeItem('vt_gh_url'); const p=document.getElementById('syncPill'); if(p) p.style.display='none'; }
+    };
+  }).observe(groups,{childList:true});
+})();
+
+init().then(autoSyncFromGitHub);
 </script>
 
 <!-- ════════════════════════ AI CHATBOT WIDGET ════════════════════════ -->
