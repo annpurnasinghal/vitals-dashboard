@@ -899,6 +899,7 @@ if (window.pdfjsLib) {
   .tv-pill-btn{border:none;background:transparent;color:rgba(255,255,255,.55);cursor:pointer;padding:5px 14px;font-size:12px;font-weight:600;font-family:inherit;transition:all .15s;line-height:1}
   .tv-pill-btn.active{background:rgba(255,255,255,.18);color:#fff}
   .tv-pill-btn:hover:not(.active){color:rgba(255,255,255,.85)}
+  #deadstockTab{flex:1;min-height:calc(100vh - 120px);background:var(--bg,#f5f7fa);margin-top:0;padding-top:16px}
 </style>
 </head>
 <body>
@@ -1151,6 +1152,9 @@ if (window.pdfjsLib) {
 
 <!-- ════════════════════════ DEAD STOCK TAB ════════════════════════════ -->
 <div id="deadstockTab" style="display:none;padding:20px;max-width:1400px;margin:0 auto"></div>
+
+<!-- ════════════════════════ PROMOTIONS TAB ════════════════════════════ -->
+<div id="promotionsTab" style="display:none;padding:20px;max-width:1400px;margin:0 auto;min-height:80vh"></div>
 
 <!-- ════════════════════════ STOCK INQUIRY TAB ════════════════════════ -->
 <div id="siTab" style="display:none;padding:20px;max-width:1400px;margin:0 auto">
@@ -1631,7 +1635,7 @@ const STORAGE_KEY = "vitals_reorder_console_v1";
 const PAGE_SIZE = 50;
 
 /* ============ STATE ============ */
-let state = { remarks:{}, statusOverrides:{}, newMeds:[], fields:{}, suppliers:{}, mrn:null, lowThreshold:0, lowStockDays:30, leadTime:14, targetCover:30, trendMode:"yoy", lastPriceImport:"", lastSalesImport:"", lastMrnImport:"", dailySales:{}, orderMeta:{}, parLevels:{}, lpoSeq:1, supplierContacts:{}, supplierWhatsapp:{}, defaultWhatsapp:"", salesAppend:[], _emptySuppliers:[], notes:{}, landedCostPct:0, displayCurrency:"AED", fxRate:1, currentUser:"", returns:{}, safetyDays:{A:14,B:10,C:5}, salesOverrides:{} };
+let state = { remarks:{}, statusOverrides:{}, newMeds:[], fields:{}, suppliers:{}, mrn:null, lowThreshold:0, lowStockDays:30, leadTime:14, targetCover:30, trendMode:"yoy", lastPriceImport:"", lastSalesImport:"", lastMrnImport:"", dailySales:{}, orderMeta:{}, parLevels:{}, lpoSeq:1, supplierContacts:{}, supplierWhatsapp:{}, defaultWhatsapp:"", salesAppend:[], _emptySuppliers:[], notes:{}, landedCostPct:0, displayCurrency:"AED", fxRate:1, currentUser:"", returns:{}, safetyDays:{A:14,B:10,C:5}, salesOverrides:{}, promotions:[] };
 const PRICE_LIST_DATE = "2026-07-13";
 const QUOTE_FIELDS = ["supplier","price","bonus","pack","expiry","moq","updated","notes"];
 let hasStorage = false;
@@ -1674,34 +1678,21 @@ function fld(m,k){ return (state.fields[m.key] && state.fields[m.key][k]!==undef
 function stockOf(m){ return fld(m,"stock"); }
 function priceOf(m){ return fld(m,"price"); }
 function costOf(m){
-  // 1. Group MRN receipts into real transactions (same date + same supplier) — actual-paid units
-  //    and free bonus units are often recorded as separate batch lines for the same delivery,
-  //    so they must be combined before computing a true per-unit cost.
-  const recs=mrnReceipts(m).filter(r=>r.d && r.s);
-  const groups={};
-  recs.forEach(r=>{
-    const key=r.d+"|"+r.s;
-    if(!groups[key]) groups[key]={date:r.d, supplier:r.s, actualQty:0, bonusQty:0, rate:null};
-    if(r.aq){ groups[key].actualQty+=Number(r.aq)||0; if(r.r!=null) groups[key].rate=Number(r.r); }
-    if(r.bq){ groups[key].bonusQty+=Number(r.bq)||0; }
-  });
-  const txns=Object.values(groups).filter(g=>g.actualQty>0 && g.rate!=null).sort((a,b)=>b.date.localeCompare(a.date));
-  if(txns.length){
-    const t=txns[0];
+  const t=getLatestMrnEntry(m);
+  if(t){
     const totalUnits=t.actualQty+t.bonusQty;
     const invoiceValue=t.actualQty*t.rate;
     const effCost=totalUnits>0?Math.round((invoiceValue/totalUnits)*100)/100:t.rate;
-    return {cost:effCost, rawRate:t.rate, actualQty:t.actualQty, bonusQty:t.bonusQty, invoiceValue, source:"last purchase", date:t.date, supplier:t.supplier};
+    return {cost:effCost, rawRate:t.rate, actualQty:t.actualQty, bonusQty:t.bonusQty, invoiceValue, source:"last purchase", date:t.date, supplier:t.supplier, n:t.n||""};
   }
-  // 2. Fallback: cheapest current supplier quote
+  // Fallback: cheapest current supplier quote
   const sups=suppliersOf(m);
   if(sups.length){
     let best=Infinity, bestSup=null;
     sups.forEach(q=>{ const ec=effectiveCostOf(q); const c=(ec!=null?ec:Number(q.price))||Infinity; if(c<best){ best=c; bestSup=q; } });
-    if(best<Infinity) return {cost:best, source:"supplier quote", date:bestSup?.updated||"", supplier:bestSup?.supplier||""};
+    if(best<Infinity) return {cost:best, source:"supplier quote", date:bestSup?.updated||"", supplier:bestSup?.supplier||"", n:""};
   }
-  // 3. No cost data available
-  return {cost:null, source:"none", date:"", supplier:""};
+  return {cost:null, source:"none", date:"", supplier:"", n:""};
 }
 function costValTip(m){
   const c=costOf(m); const stk=Number(stockOf(m))||0;
@@ -1736,14 +1727,15 @@ function landedCostOf(m){
    the dashboard is kept consistent with that convention rather than switching to
    margin-on-price (a different, also-valid metric answering a different question). */
 function marginPctOf(m){
-  const c=landedCostOf(m); const rawSp=priceOf(m);
-  // check the raw value for missing/blank BEFORE Number() conversion — Number(null) is 0
-  // (not NaN), so a genuinely missing price would otherwise silently compute as if the
-  // item sold for AED 0, always producing a bogus "-100% margin" instead of "unknown"
-  if(c.cost==null||c.cost<=0||rawSp==null||rawSp==="") return null;
-  const sp=Number(rawSp);
-  if(isNaN(sp)) return null;
-  return Math.round(((sp/c.cost)-1)*100*10)/10;
+  // Manager formula: (Price List Rate / Cost of Goods per unit) × 100 − 100
+  var c=costOf(m);
+  if(!c||!c.cost||c.cost<=0) return null;
+  var sp=Number(priceOf(m))||0;
+  if(sp<=0) return null;
+  var margin=Math.round(((sp/c.cost)*100-100)*10)/10;
+  // Sanity cap: margins above 1000% indicate corrupt data
+  if(margin>1000) return null;
+  return margin;
 }
 function bonusOf(m){ return fld(m,"bonus"); }
 /* the price-list "Bonus" column is free-text supplier terms and is purely cosmetic —
@@ -1803,7 +1795,79 @@ function coverageBadge(m){
 }
 /* supplier quotes now come from: MRN purchase history (cost) + manual/uploaded quotes */
 function mrnSource(){ return state.mrn || MRN_BASE; }
-function mrnReceipts(m){ const l=mrnSource()[normName(m.name)]; return l?l.slice():[]; }
+function deduplicateMrn(entries){
+  if(!entries||!entries.length) return [];
+  var hasDocNo=entries.some(function(e){ return e.n&&e.n.trim(); });
+  if(hasDocNo){
+    var groups={};
+    entries.forEach(function(e){
+      var key=(e.n&&e.n.trim()?e.n.trim():'NODOC|'+(e.b||'')+'|'+(e.d||''))+'|'+(e.s||'');
+      if(!groups[key]){
+        groups[key]={n:e.n||'',s:e.s||'',r:Number(e.r)||0,d:e.d||'',aq:0,bq:0,e:e.e||'',b:e.b||''};
+      }
+      groups[key].aq+=(Number(e.aq)||0);
+      groups[key].bq+=(Number(e.bq)||0);
+      if(Number(e.r)>0) groups[key].r=Number(e.r);
+      if(e.e&&e.e>groups[key].e) groups[key].e=e.e;
+      if(e.d&&e.d>groups[key].d) groups[key].d=e.d;
+    });
+    return Object.values(groups).map(function(g){
+      return {n:g.n,s:g.s,r:g.r,d:g.d,aq:g.aq>0?g.aq:null,bq:g.bq>0?g.bq:null,e:g.e,b:g.b};
+    });
+  }
+  // Fallback: group by date+supplier, take MAX aq and MAX bq separately
+  // Correctly handles split entries (aq in one row, bq in another)
+  // Works even when batch number is empty
+  var dateGroups={};
+  entries.forEach(function(e){
+    var key=(e.d||'')+'|'+(e.s||'');
+    if(!dateGroups[key]){
+      dateGroups[key]={s:e.s||'',r:0,d:e.d||'',aq:0,bq:0,e:e.e||'',b:e.b||'',n:''};
+    }
+    var aq=Number(e.aq)||0;
+    var bq=Number(e.bq)||0;
+    var r=Number(e.r)||0;
+    if(aq>dateGroups[key].aq) dateGroups[key].aq=aq;
+    if(bq>dateGroups[key].bq) dateGroups[key].bq=bq;
+    if(r>0&&aq>0&&r>dateGroups[key].r) dateGroups[key].r=r;
+    if(e.e&&e.e>dateGroups[key].e) dateGroups[key].e=e.e;
+  });
+  return Object.values(dateGroups).map(function(g){
+    return {n:g.n,s:g.s,r:g.r,d:g.d,
+            aq:g.aq>0?g.aq:null,
+            bq:g.bq>0?g.bq:null,
+            e:g.e,b:g.b};
+  });
+}
+function getLatestMrnEntry(m){
+  var key=typeof mrnKey==='function'?mrnKey(m):(m.name||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  var raw=mrnSource()[key]||[];
+  var entries=deduplicateMrn(raw);
+  if(!entries.length) return null;
+  var sorted=entries.slice().sort(function(a,b){ return (b.d||'').localeCompare(a.d||''); });
+  // Manager rule: keep only entries with BOTH rate>0 AND bq>0
+  // Entries missing either are not a usable cost basis
+  var best=sorted.find(function(e){
+    var aq=Number(e.aq||e.actualQty||0);
+    var bq=Number(e.bq||e.bonusQty||0);
+    var r=Number(e.r||e.rate||0);
+    return aq>0 && bq>0 && r>0;
+  });
+  // Fallback: latest entry with aq>0 and rate>0 (no bonus, but still valid cost basis)
+  if(!best) best=sorted.find(function(e){
+    return Number(e.aq||e.actualQty||0)>0 && Number(e.r||e.rate||0)>0;
+  });
+  if(!best) return null;
+  return {
+    actualQty: Number(best.aq||best.actualQty||0),
+    bonusQty:  Number(best.bq||best.bonusQty||0),
+    rate:      Number(best.r||best.rate||0),
+    date:      best.d||best.date||'',
+    supplier:  best.s||best.supplier||'',
+    n:         best.n||''
+  };
+}
+function mrnReceipts(m){ const l=mrnSource()[normName(m.name)]; return l?deduplicateMrn(l.slice()):[]; }
 /* ---- batch / lot tracking (FEFO) — built from MRN receipt batch+expiry data that's
    already imported per receipt line but was otherwise only used for cost calculation.
    Not a full lot-level stock ledger (this app doesn't track quantity depletion per batch
@@ -1814,7 +1878,7 @@ function batchesOf(m){
   const groups={};
   recs.forEach(r=>{
     const key=(r.b||"")+"|"+r.e+"|"+(r.d||"");
-    if(!groups[key]) groups[key]={batch:r.b||"", expiry:r.e, received:r.d||"", supplier:r.s||"", qty:0};
+    if(!groups[key]) groups[key]={batch:r.b||"", expiry:r.e, received:r.d||"", supplier:r.s||"", qty:0, docNo:r.n||""};
     groups[key].qty += (Number(r.aq)||0)+(Number(r.bq)||0);
   });
   return Object.values(groups).sort((a,b)=>a.expiry.localeCompare(b.expiry));
@@ -1991,6 +2055,11 @@ function parseBonus(bonusStr){
 function bonusPctOf(q){
   const p=parseBonus(q.bonus); if(!p||p.actual===0) return null;
   return Math.round(p.bonus/p.actual*100*10)/10;
+}
+function bonusPctOfMed(m){
+  const t=getLatestMrnEntry(m);
+  if(!t||t.bonusQty<=0||t.actualQty<=0) return null;
+  return Math.round(t.bonusQty/t.actualQty*100*10)/10;
 }
 function effectiveCostOf(q){
   const rate=Number(q.price); if(isNaN(rate)||q.price==null||q.price==="") return null;
@@ -2884,7 +2953,8 @@ const TABS = [
   {id:"ALL", label:"All", icon:"📋"},
   {id:"DATAMGMT", label:"Data Management", icon:"📥"},
   {id:"STOCKINQUIRY", label:"Stock Inquiry", icon:"🔍"},
-  {id:"MEDREF", label:"Medicine Reference", icon:"🏥"}
+  {id:"MEDREF", label:"Medicine Reference", icon:"🏥"},
+  {id:"PROMOTIONS", label:"Promotions", icon:"🎯"}
 ];
 /* medicines relevant to the By action view: anything with an action, or awaiting one (out/low) */
 function actionUniverse(){
@@ -4024,29 +4094,52 @@ function siExtractSaltDisplay(saltStr) {
 }
 
 function siMultiSearch(m, query) {
-  if (!query) return true;
-  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (!query || !query.trim()) return true;
+  var q = query.toLowerCase().trim();
+  var tokens = q.split(/\s+/).filter(Boolean);
   if (!tokens.length) return true;
-  const saltDisp = siExtractSaltDisplay(m.salt || '').toLowerCase();
-  const saltRaw  = (m.salt || '').toLowerCase();
-  const name     = (m.name || '').toLowerCase();
-  const ddcClean = (m.ddc || '').replace(/[^a-z0-9]/gi,'').toLowerCase();
-  const form     = (m.form || '').toLowerCase();
-  const mfr      = (m.manufacturer || '').toLowerCase();
-  const owner    = (m.owner || '').toLowerCase();
-  const bin      = (m.bin || '').toLowerCase();
-  const cust     = (m.topCustomer || '').toLowerCase();
-  const sales    = (m.topSalesperson || '').toLowerCase();
-  const remark   = (remarkOf(m) || '').toLowerCase();
-  const stock    = String(stockOf(m) != null ? stockOf(m) : '').toLowerCase();
-  const supNames = suppliersOf(m).map(s=>(s.supplier||'').toLowerCase()).join(' ');
-  return tokens.every(t => {
-    const tc = t.replace(/[^a-z0-9]/gi,'');
-    return name.includes(t) || saltDisp.includes(t) || saltRaw.includes(t) ||
-      (tc && ddcClean.includes(tc)) || form.includes(t) || mfr.includes(t) ||
-      owner.includes(t) || bin.includes(t) || cust.includes(t) || sales.includes(t) ||
-      remark.includes(t) || stock.includes(t) || supNames.includes(t);
-  });
+
+  var coreFields = [
+    (m.name || '').toLowerCase(),
+    (m.salt || '').toLowerCase().replace(/[\(\)\:]/g, ' '),
+    (m.ddc || '').replace(/[^a-z0-9]/gi, '').toLowerCase(),
+    (m.form || '').toLowerCase(),
+    (m.manufacturer || '').toLowerCase(),
+    (m.owner || '').toLowerCase(),
+  ];
+
+  var extFields = [
+    (m.topCustomer || '').toLowerCase(),
+    (m.topSalesperson || '').toLowerCase(),
+    (m.bin || '').toLowerCase(),
+    (remarkOf(m) || '').toLowerCase(),
+    suppliersOf(m).map(function(s){
+      return (s.supplier || '').toLowerCase();
+    }).join(' '),
+  ];
+
+  if (coreFields.some(function(f) { return f.includes(q); })) return true;
+
+  if (tokens.length > 1) {
+    if (coreFields.some(function(f) {
+      return tokens.every(function(t) { return f.includes(t); });
+    })) return true;
+  }
+
+  var qNoSpace = q.replace(/\s+/g, '');
+  if (qNoSpace.length > 3) {
+    if (coreFields.some(function(f) {
+      return f.replace(/\s+/g, '').includes(qNoSpace);
+    })) return true;
+  }
+
+  if (tokens.length === 1) {
+    return coreFields.concat(extFields).some(function(f) {
+      return f.includes(tokens[0]);
+    });
+  }
+
+  return false;
 }
 
 function siHighlight(text, query) {
@@ -4071,6 +4164,7 @@ function render(){
   const isStockInquiry = activeTab==="STOCKINQUIRY";
   const isMedRef = activeTab==="MEDREF";
   const isDeadstock = activeTab==="DEADSTOCK";
+  const isPromotions = activeTab==='PROMOTIONS';
   // page title bar
   const tabDef=TABS.find(t=>t.id===activeTab)||{icon:"",label:""};
   const cnt=activeTab!=="DASHBOARD"?tabCount(activeTab):0;
@@ -4081,23 +4175,64 @@ function render(){
   else if(isStockInquiry){ ptb.innerHTML=`<div class="ptb"><span class="ptb-icon">🔍</span><span class="ptb-title">Stock Inquiry</span><span class="ptb-sub">Bulk-match any list against live stock</span></div>`; }
   else if(isMedRef){ ptb.innerHTML=`<div class="ptb"><span class="ptb-icon">🏥</span><span class="ptb-title">Medicine Reference</span><span class="ptb-sub">Search UAE DDC registry + your live stock</span></div>`; }
   else if(isDeadstock){ ptb.innerHTML=`<div class="ptb"><span class="ptb-icon">📦</span><span class="ptb-title">Dead Stock</span><span class="ptb-sub">Zero sales for 3+ months with stock on hand</span></div>`; }
+  else if(isPromotions){ ptb.innerHTML=`<div class="ptb"><span class="ptb-icon">🎯</span><span class="ptb-title">Promotions</span><span class="ptb-sub">Track supplier bonus promotions by period</span></div>`; }
   else { ptb.innerHTML=`<div class="ptb"><span class="ptb-icon">${tabDef.icon||''}</span><span class="ptb-title">${tabDef.label||activeTab}</span><span class="ptb-cnt">${cnt.toLocaleString()} medicines</span><span style="flex:1"></span>${tvPill()}</div>`; }
   const isOosTab=activeTab==='OUT OF STOCK'||activeTab==='LOW STOCK';
   const sb=document.getElementById('oosSeasonBar');
   if(sb){ if(isOosTab){ sb.style.display='block'; renderOosFilterBar('oosSeasonBar',meds.filter(m=>inTab(m,activeTab))); } else { sb.style.display='none'; } }
   // context-specific toolbar visibility
-  document.getElementById("tableCard").style.display = (isBoard||isDataMgmt||isStockInquiry||isMedRef||isDeadstock||(isDash&&!drillFilter)) ? "none" : "";
+  document.getElementById("tableCard").style.display = (isBoard||isDataMgmt||isStockInquiry||isMedRef||isDeadstock||isPromotions||(isDash&&!drillFilter)) ? "none" : "";
   document.getElementById("board").style.display = isBoard ? "grid" : "none";
   document.getElementById("groups").style.display = isBoard ? "flex" : "none";
-  const tbar=document.getElementById("toolbar2"); if(tbar) tbar.style.display=(isDataMgmt||isStockInquiry||isMedRef||isDeadstock||(isDash&&!drillFilter))?"none":"";
+  const tbar=document.getElementById("toolbar2"); if(tbar) tbar.style.display=(isDataMgmt||isStockInquiry||isMedRef||isDeadstock||isPromotions||(isDash&&!drillFilter))?"none":"";
   const siTabEl=document.getElementById("siTab"); if(siTabEl) siTabEl.style.display = isStockInquiry ? "" : "none";
   const mrTabEl=document.getElementById("medRefTab"); if(mrTabEl) mrTabEl.style.display = isMedRef ? "" : "none";
   const dsTabEl=document.getElementById("deadstockTab"); if(dsTabEl) dsTabEl.style.display = isDeadstock ? "" : "none";
+  const promTabCtrl=document.getElementById("promotionsTab"); if(promTabCtrl) promTabCtrl.style.display = isPromotions ? "" : "none";
   if(isDeadstock){
-    document.getElementById("pager").innerHTML="";
+    var dsHint=document.getElementById('storageHint');
+    if(dsHint) dsHint.style.marginBottom='0';
+    var dsMainEl=document.querySelector('main');
+    if(dsMainEl){ dsMainEl.style.minHeight='0'; dsMainEl.style.padding='0'; dsMainEl.style.margin='0'; }
+    var dashKpi=document.getElementById('dashboard');
+    if(dashKpi) dashKpi.style.display='none';
+    document.getElementById('board').style.display     ='none';
+    document.getElementById('tableCard').style.display ='none';
+    document.getElementById('groups').style.display    ='none';
+    document.getElementById('pager').innerHTML         ='';
+    document.getElementById('pager').style.display     ='none';
+    var dsTvEl=document.getElementById('tvContainer');
+    if(dsTvEl) dsTvEl.style.display='none';
+    var dsMetaCount=document.getElementById('metaCount');
+    if(dsMetaCount) dsMetaCount.innerHTML='';
+    var dsMetaTab=document.getElementById('metaTab');
+    if(dsMetaTab) dsMetaTab.textContent='';
+    var dsSubtabsEl=document.getElementById('subtabs');
+    if(dsSubtabsEl) dsSubtabsEl.style.display='none';
+    var dsTabEl2=document.getElementById('deadstockTab');
+    if(dsTabEl2) dsTabEl2.style.display='';
     renderDeadstockTab();
     return;
   }
+  if(isPromotions){
+    document.getElementById('metaTab').textContent='';
+    document.getElementById('metaCount').textContent='';
+    document.querySelector('main').style.display='none';
+    document.getElementById('deadstockTab').style.display='none';
+    var mrTabCtrl=document.getElementById('medRefTab'); if(mrTabCtrl) mrTabCtrl.style.display='none';
+    var siTabCtrl=document.getElementById('siTab'); if(siTabCtrl) siTabCtrl.style.display='none';
+    var promElRender=document.getElementById('promotionsTab'); if(promElRender) promElRender.style.display='';
+    renderPromotionsTab();
+    return;
+  }
+  var mainEl=document.querySelector('main');
+  if(mainEl){ mainEl.style.display=''; mainEl.style.minHeight=''; mainEl.style.padding=''; mainEl.style.margin=''; }
+  var promTabHide=document.getElementById('promotionsTab'); if(promTabHide) promTabHide.style.display='none';
+  var hintEl=document.getElementById('storageHint');
+  if(hintEl) hintEl.style.marginBottom='';
+  var dashKpi=document.getElementById('dashboard');
+  if(dashKpi) dashKpi.style.display=isDash?'':'none';
+  document.getElementById('pager').style.display='';
   const tvEl=document.getElementById("tvContainer"); if(tvEl) tvEl.style.display="none";
   // context filters: show/hide based on tab
   const isStock=["OUT OF STOCK","LOW STOCK","ADEQUATE"].includes(activeTab);
@@ -4698,14 +4833,15 @@ function renderTabs(){
     ]},
     {label:"Tools",items:[
       {id:"STOCKINQUIRY",icon:"🔍",label:"Stock Inquiry"},
-      {id:"MEDREF",icon:"🏥",label:"Medicine Reference"}
+      {id:"MEDREF",icon:"🏥",label:"Medicine Reference"},
+      {id:"PROMOTIONS",icon:"🎯",label:"Promotions"}
     ]}
   ];
   let html="";
   groups.forEach(g=>{
     if(g.label) html+=`<div class="sb-group">${g.label}</div>`;
     g.items.forEach(t=>{
-      const cnt=(t.id!=="DASHBOARD"&&t.id!=="DATAMGMT"&&t.id!=="STOCKINQUIRY"&&t.id!=="DEADSTOCK"&&t.id!=="MEDREF")?tabCount(t.id):0;
+      const cnt=(t.id!=="DASHBOARD"&&t.id!=="DATAMGMT"&&t.id!=="STOCKINQUIRY"&&t.id!=="DEADSTOCK"&&t.id!=="MEDREF"&&t.id!=="PROMOTIONS")?tabCount(t.id):0;
       const active=t.id===activeTab;
       html+=`<button class="sb-item ${active?'active':''}" data-tab="${t.id}">
         <span class="sb-icon">${t.icon}</span>
@@ -4715,7 +4851,7 @@ function renderTabs(){
     });
   });
   document.getElementById("tabs").innerHTML=html;
-  document.querySelectorAll(".sb-item").forEach(b=>b.onclick=()=>{activeTab=b.dataset.tab;_dsCategory='all';actionFilterVal="";boardSel="";supplierSel="";supFilter="";supSort="";supChip="";selectedKeys.clear();colSort={col:"",dir:""};colFilters={statuses:null,stockMin:"",stockMax:"",priceMin:"",priceMax:"",actions:null};drillFilter=null;drillLabel="";
+  document.querySelectorAll(".sb-item").forEach(b=>b.onclick=()=>{activeTab=b.dataset.tab;if(activeTab!=='PROMOTIONS'){_promoActiveId=null;var _ptEl=document.getElementById('promotionsTab');if(_ptEl){_ptEl.style.display='none';_ptEl.innerHTML='';}var _mEl=document.querySelector('main');if(_mEl) _mEl.style.display='';}_dsCategory='all';actionFilterVal="";boardSel="";supplierSel="";supFilter="";supSort="";supChip="";selectedKeys.clear();colSort={col:"",dir:""};colFilters={statuses:null,stockMin:"",stockMax:"",priceMin:"",priceMax:"",actions:null};drillFilter=null;drillLabel="";
     searchTerm=""; const si=document.getElementById("search"); if(si) si.value=""; // clear search on tab switch — every other filter already resets here, search was the one exception
     page=1;render();
     // auto-close sidebar on mobile
@@ -6198,11 +6334,11 @@ function renderBatchTracking(){
   let html=`<div class="qsec">📦 Batches on hand <span class="qsub">from purchase register — First-Expiry-First-Out order</span></div>`;
   html+=`<button class="hist-toggle" id="batchToggle">${batchOpen?"▾":"▸"} ${batches.length} batch${batches.length>1?'es':''} · ${totalQty.toLocaleString()} units received${expiredCount?` · ${expiredCount} expired`:''}${nearest?` · nearest expiry ${esc(nearest.expiry)}`:''}</button>`;
   if(batchOpen){
-    html+=`<table class="qt"><thead><tr><th>Batch / Lot</th><th>Received</th><th>Expiry</th><th class="num">Qty received</th><th>Supplier</th></tr></thead><tbody>`;
+    html+=`<table class="qt"><thead><tr><th>MRN / Doc #</th><th>Batch / Lot</th><th>Received</th><th>Expiry</th><th class="num">Qty received</th><th>Supplier</th></tr></thead><tbody>`;
     batches.forEach((b,i)=>{
       const daysToExp=Math.round((new Date(b.expiry)-now)/86400000);
       const soon=daysToExp<=90;
-      html+=`<tr${i===0?' style="font-weight:600"':''}><td>${esc(b.batch||'(no batch #)')}${i===0?' <span class="badge b-received" title="Dispense this batch first">FEFO next</span>':''}</td><td>${esc(b.received||'–')}</td><td>${esc(b.expiry)}${soon?` <span class="badge b-overdue">${daysToExp<0?'expired':daysToExp+'d left'}</span>`:''}</td><td class="num">${b.qty.toLocaleString()}</td><td>${esc(b.supplier||'–')}</td></tr>`;
+      html+=`<tr${i===0?' style="font-weight:600"':''}><td>${esc(b.docNo||'–')}</td><td>${esc(b.batch||'(no batch #)')}${i===0?' <span class="badge b-received" title="Dispense this batch first">FEFO next</span>':''}</td><td>${esc(b.received||'–')}</td><td>${esc(b.expiry)}${soon?` <span class="badge b-overdue">${daysToExp<0?'expired':daysToExp+'d left'}</span>`:''}</td><td class="num">${b.qty.toLocaleString()}</td><td>${esc(b.supplier||'–')}</td></tr>`;
     });
     html+=`</tbody></table><div class="cm-calc-note">This reflects batches received (per purchase register), not live remaining quantity per batch — this app doesn't track per-batch depletion as sales happen, only total current stock.</div>`;
   }
@@ -6231,12 +6367,15 @@ function renderCostMarginSection(m){
   let html=`<div class="qsec">💰 Cost &amp; Margin</div><div class="cm-grid">`;
   if(c.cost!=null){
     html+=`<div class="cm-card" title="${esc(costValTip(m))}"><div class="cm-k">Cost of Goods (per unit)</div><div class="cm-v">AED ${c.cost.toFixed(2)}</div>
-      ${c.source==="last purchase"?`<div class="cm-sub">from ${c.bonusQty>0?`${c.actualQty.toLocaleString()} + ${c.bonusQty.toLocaleString()} bonus`:c.actualQty.toLocaleString()}, ${c.date}${c.landedPct?` + ${c.landedPct}% landed cost`:''}</div>`:c.source==="supplier quote"?`<div class="cm-sub">from supplier quote, no purchase history yet${c.landedPct?` + ${c.landedPct}% landed cost`:''}</div>`:''}
+      ${c.source==="last purchase"?`<div class="cm-sub">from ${c.bonusQty>0?`${c.actualQty.toLocaleString()} + ${c.bonusQty.toLocaleString()} bonus`:c.actualQty.toLocaleString()}${c.n?` · MRN ${esc(c.n)}`:''}, ${c.date}${c.landedPct?` + ${c.landedPct}% landed cost`:''}</div>`:c.source==="supplier quote"?`<div class="cm-sub">from supplier quote, no purchase history yet${c.landedPct?` + ${c.landedPct}% landed cost`:''}</div>`:''}
     </div>`;
-    if(sp>0){
-      const marginPct=marginPctOf(m);
-      html+=`<div class="cm-card good" title="Margin = (Selling Price ÷ Cost of Goods per unit × 100) − 100\n(AED ${sp.toFixed(2)} ÷ AED ${c.cost.toFixed(2)} × 100) − 100 = ${marginPct}%\n\nThis uses the bonus-adjusted true cost${c.landedPct?' plus landed cost':''}, so it reflects your real markup on cost — not just invoiced rate vs price."><div class="cm-k">Margin (price vs cost per pc)</div><div class="cm-v">${marginPct}%</div></div>`;
-    }
+  }
+  var dsLatest=getLatestMrnEntry(m);
+  var dsAq=dsLatest?Number(dsLatest.actualQty||dsLatest.aq)||0:0;
+  var dsBq=dsLatest?Number(dsLatest.bonusQty||dsLatest.bq)||0:0;
+  var marginPct=(dsLatest&&dsAq>0&&dsBq>0)?Math.round((dsBq/dsAq)*100*10)/10:null;
+  if(marginPct!==null){
+    html+=`<div class="cm-card good" title="Margin = (Bonus Qty ÷ Actual Qty) × 100\n(${dsBq.toLocaleString()} ÷ ${dsAq.toLocaleString()} × 100) = ${marginPct}%\nThis is the bonus percentage you receive from the supplier."><div class="cm-k">Margin (bonus on purchase)</div><div class="cm-v">${marginPct}%</div></div>`;
   }
   html+=`</div>`;
   // interactive calculator
@@ -6271,13 +6410,21 @@ function wireCostMarginCalc(m){
     const cost=Number(document.getElementById("cmCost").value)||0;
     const disc=Number(document.getElementById("cmDiscount").value)||0;
     const totalQty=aq+bq;
-    const sellMargin=cost>0?Math.round(((sp/cost)-1)*1000)/10:0;
-    const netMargin=Math.round((sellMargin-disc)*10)/10;
+    // Manager formulas:
+    // Revenue = selling price × actual qty only (bonus units not billed to customer)
+    // Cost    = cost per unit × total qty (actual + bonus — cost spread across all units handed over)
+    // Selling Margin % = (sp / cost) × 100 − 100
+    // Net Margin Left % = (net AED / cost total) × 100, then subtract given-to-customer %
+    const revenue=sp*aq;
+    const costTotal=cost*totalQty;
+    const net=revenue-costTotal;
+    const sellMargin=cost>0?Math.round(((sp/cost)*100-100)*10)/10:0;
+    const netMarginRaw=costTotal>0?Math.round((net/costTotal)*100*10)/10:0;
+    const netMargin=Math.round((netMarginRaw-disc)*10)/10;
     document.getElementById("cmTotalQty").textContent=totalQty.toLocaleString();
     document.getElementById("cmSellMargin").textContent=sellMargin+"%";
     document.getElementById("cmNetMargin").textContent=netMargin+"%";
-    const revenue=sp*aq, costTotal=cost*totalQty, net=revenue-costTotal;
-    document.getElementById("cmSummary").innerHTML=`AED ${sp.toFixed(2)} revenue − AED ${cost.toFixed(2)} cost (for ${totalQty.toLocaleString()} units total) = <b>AED ${net.toFixed(2)} net</b>`;
+    document.getElementById("cmSummary").innerHTML=`AED ${revenue.toFixed(2)} revenue \u2212 AED ${costTotal.toFixed(2)} cost (for ${totalQty.toLocaleString()} units total) = <b>AED ${net.toFixed(2)} net</b>`;
   };
   ids.forEach(id=>document.getElementById(id).oninput=recalc);
   recalc();
@@ -6987,7 +7134,7 @@ function handleMrnFile(file){
         (map[k]=map[k]||[]).push({s:iSup>=0?String(row[iSup]||"").trim():"", r:iRate>=0?num(row[iRate]):null,
           aq:iAq>=0?num(row[iAq]):null, bq:iBq>=0?num(row[iBq]):null,
           e:iExp>=0?dstr(row[iExp]):"", d:iDate>=0?dstr(row[iDate]):"", b:iBatch>=0?String(row[iBatch]||"").trim():"",
-          v:iVoucher>=0?String(row[iVoucher]||"").trim():""});
+          n:iVoucher>=0?String(row[iVoucher]||"").trim():""});
         receipts++;
       }
       const items=Object.keys(map).length;
@@ -7179,6 +7326,16 @@ function applyState(){
     (pendingState.newMeds||[]).forEach(n=>{ if(!existKeys.has(n.key)) state.newMeds.push(n); });
     // mrn: incoming replaces if present
     if(pendingState.mrn) state.mrn = pendingState.mrn;
+    if(pendingState.promotions){
+      if(!state.promotions) state.promotions=[];
+      var existIds=new Set(state.promotions.map(function(p){return p.id;}));
+      (pendingState.promotions||[]).forEach(function(p){
+        if(existIds.has(p.id)){
+          var idx=state.promotions.findIndex(function(x){return x.id===p.id;});
+          if(idx>=0) state.promotions[idx]=p;
+        } else { state.promotions.push(p); }
+      });
+    } else if(!state.promotions){ state.promotions=[]; }
     // settings: keep current unless missing
     if(!state.lowThreshold && pendingState.lowThreshold) state.lowThreshold=pendingState.lowThreshold;
     if(!state.leadTime && pendingState.leadTime) state.leadTime=pendingState.leadTime;
@@ -11291,6 +11448,880 @@ function cbClearHistory() {
   cbHistory = [];
   document.getElementById('cbMessages').innerHTML = '';
   cbAddMessage('assistant', 'Chat cleared. Ask me anything about your stock!');
+}
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// PROMOTIONS TAB
+// ══════════════════════════════════════════════════════════════════
+var _promoActiveId   = null;
+var _promoActiveYear  = null;
+var _promoActiveMonth = null;
+var _promoCompareMode = 'month';
+
+// --- helpers ---
+function promoGetYearMonth(p){
+  var d = p.startDate || p.createdAt || '';
+  if(!d) return {year:'Unknown', month:'00'};
+  var parts = d.split('-');
+  return {year: parts[0]||'Unknown', month: parts[1]||'00'};
+}
+function promoMonthLabel(mm){
+  var names=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var idx = parseInt(mm,10)-1;
+  return (idx>=0&&idx<12) ? names[idx] : mm;
+}
+
+function promoRenderNavigation(promos){
+  // Build year → month → [promos] index
+  var tree = {};
+  promos.forEach(function(p){
+    var ym = promoGetYearMonth(p);
+    if(!tree[ym.year]) tree[ym.year] = {};
+    if(!tree[ym.year][ym.month]) tree[ym.year][ym.month] = [];
+    tree[ym.year][ym.month].push(p);
+  });
+  var years = Object.keys(tree).sort().reverse();
+  if(!years.length) return '';
+
+  // Default active year
+  if(!_promoActiveYear || !tree[_promoActiveYear]) _promoActiveYear = years[0];
+
+  var html = '';
+
+  // Level 1 — year strip + Compare tab
+  html += '<div style="display:flex;gap:0;border-bottom:2px solid #E2E8F0;overflow-x:auto;margin-bottom:0">';
+  html += '<div onclick="promoSetTab(\'compare\')" style="padding:10px 18px;cursor:pointer;flex-shrink:0;'+
+    'border-bottom:'+(_promoActiveId==='compare'?'3px solid #0c7c7c':'3px solid transparent')+';'+
+    'background:'+(_promoActiveId==='compare'?'#fff':'#F7F9FC')+';margin-bottom:-2px;'+
+    'font-size:12px;font-weight:700;color:'+(_promoActiveId==='compare'?'#0c7c7c':'#6B7280')+'">⚖️ Compare</div>';
+  years.forEach(function(yr){
+    var isAct = (_promoActiveId!=='compare') && (_promoActiveYear===yr);
+    html += '<div onclick="promoSetYear(\''+yr+'\')" style="padding:10px 18px;cursor:pointer;flex-shrink:0;'+
+      'border-bottom:'+(isAct?'3px solid #0c7c7c':'3px solid transparent')+';'+
+      'background:'+(isAct?'#fff':'#F7F9FC')+';margin-bottom:-2px;'+
+      'font-size:13px;font-weight:700;color:'+(isAct?'#0c7c7c':'#6B7280')+'">'+yr+'</div>';
+  });
+  html += '</div>';
+
+  if(_promoActiveId==='compare') return html;
+
+  // Level 2 — month strip
+  var months = Object.keys(tree[_promoActiveYear]).sort();
+  // Default active month
+  if(!_promoActiveMonth || !tree[_promoActiveYear][_promoActiveMonth]){
+    _promoActiveMonth = months[0];
+    // also reset active promo
+    var firstMonthPromos = tree[_promoActiveYear][_promoActiveMonth];
+    _promoActiveId = firstMonthPromos[0].id;
+  }
+
+  html += '<div style="display:flex;gap:0;border-bottom:1px solid #E2E8F0;overflow-x:auto;margin-bottom:0;background:#FAFAFA">';
+  months.forEach(function(mm){
+    var isAct = _promoActiveMonth===mm;
+    var cnt = tree[_promoActiveYear][mm].length;
+    html += '<div onclick="promoSetMonth(\''+mm+'\')" style="padding:8px 16px;cursor:pointer;flex-shrink:0;'+
+      'border-bottom:'+(isAct?'3px solid #0c7c7c':'3px solid transparent')+';'+
+      'background:'+(isAct?'#fff':'transparent')+';margin-bottom:-1px;text-align:center">'+
+      '<div style="font-size:12px;font-weight:700;color:'+(isAct?'#0c7c7c':'#374151')+'">'+promoMonthLabel(mm)+'</div>'+
+      '<div style="font-size:10px;color:#6B7280">'+cnt+' promo'+(cnt>1?'s':'')+'</div>'+
+    '</div>';
+  });
+  html += '</div>';
+
+  return html;
+}
+
+function renderPromotionsTab(){
+  var el=document.getElementById('promotionsTab'); if(!el) return;
+  if(!state.promotions) state.promotions=[];
+  var today=new Date().toISOString().slice(0,10);
+  state.promotions.forEach(function(p){
+    if(!p.startDate||!p.endDate) return;
+    if(p.endDate<today) p.status='Expired';
+    else if(p.startDate>today) p.status='Upcoming';
+    else p.status='Active';
+  });
+  var promos=state.promotions.slice().sort(function(a,b){
+    return (b.startDate||'').localeCompare(a.startDate||'');
+  });
+
+  var html='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">'+
+    '<div><div style="font-size:18px;font-weight:700;color:#1a2e3b">🎯 Promotions</div>'+
+    '<div style="font-size:12px;color:#6B7280;margin-top:2px">Track supplier bonus promotions · '+promos.length+' total</div></div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button onclick="promoOpenNewModal()" style="padding:8px 18px;background:#0c7c7c;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">+ New Promotion</button>'+
+      '<button onclick="promoImportFile()" style="padding:8px 16px;background:#fff;color:#0c7c7c;border:2px solid #0c7c7c;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📤 Import PDF / Excel</button>'+
+    '</div></div>';
+
+  if(!promos.length){
+    html+='<div style="text-align:center;padding:80px 20px;color:#6B7280">'+
+      '<div style="font-size:3em;margin-bottom:16px">🎯</div>'+
+      '<div style="font-size:15px;font-weight:600;margin-bottom:8px">No promotions yet</div>'+
+      '<div style="font-size:12px;margin-bottom:20px">Create your first promotion to track supplier bonus schemes</div>'+
+      '<button onclick="promoOpenNewModal()" style="padding:10px 24px;background:#0c7c7c;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">+ New Promotion</button>'+
+    '</div>';
+    el.innerHTML=html; return;
+  }
+
+  // Two-level navigation
+  html += promoRenderNavigation(promos);
+
+  if(_promoActiveId==='compare'){
+    html+=promoRenderCompare(promos);
+  } else {
+    // Find promos in active year/month
+    var ymPromos = promos.filter(function(p){
+      var ym=promoGetYearMonth(p);
+      return ym.year===_promoActiveYear && ym.month===_promoActiveMonth;
+    });
+    // Ensure _promoActiveId is valid within current month
+    if(!ymPromos.find(function(p){return p.id===_promoActiveId;})){
+      _promoActiveId = ymPromos.length ? ymPromos[0].id : null;
+    }
+    if(ymPromos.length>1){
+      // Selector strip within month
+      html+='<div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 0 8px;border-bottom:1px solid #F0F0F0;margin-bottom:12px">';
+      ymPromos.forEach(function(p){
+        var isAct=_promoActiveId===p.id;
+        var sc=p.status==='Active'?'#166534':p.status==='Upcoming'?'#0369A1':'#6B7280';
+        html+='<div onclick="promoSetActiveId(\''+p.id+'\')" style="padding:7px 14px;cursor:pointer;border-radius:8px;'+
+          'background:'+(isAct?'#0c7c7c':'#F0F9FF')+';color:'+(isAct?'#fff':'#0c7c7c')+';'+
+          'border:1px solid '+(isAct?'#0c7c7c':'#B5D9D9')+';font-size:12px;font-weight:600">'+
+          esc(p.name)+' <span style="font-size:10px;color:'+(isAct?'rgba(255,255,255,0.8)':sc)+'">'+p.status+'</span>'+
+        '</div>';
+      });
+      html+='</div>';
+    }
+    var activePromo = promos.find(function(p){return p.id===_promoActiveId;});
+    if(activePromo) html+=promoRenderDetail(activePromo);
+  }
+
+  el.innerHTML=html;
+}
+
+function promoSetTab(id){ _promoActiveId=id; renderPromotionsTab(); }
+function promoSetYear(yr){
+  _promoActiveYear=yr; _promoActiveMonth=null; _promoActiveId=null;
+  renderPromotionsTab();
+}
+function promoSetMonth(mm){
+  _promoActiveMonth=mm;
+  var promos=(state.promotions||[]).filter(function(p){
+    var ym=promoGetYearMonth(p);
+    return ym.year===_promoActiveYear && ym.month===mm;
+  });
+  _promoActiveId=promos.length?promos[0].id:null;
+  renderPromotionsTab();
+}
+function promoSetActiveId(id){ _promoActiveId=id; renderPromotionsTab(); }
+function promoSetCompareMode(m){ _promoCompareMode=m; renderPromotionsTab(); }
+
+function promoStatCard(label,value,color,bg){
+  return '<div style="background:'+bg+';border:1px solid rgba(0,0,0,0.08);border-radius:8px;padding:10px 16px;flex:1;min-width:110px">'+
+    '<div style="font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em">'+label+'</div>'+
+    '<div style="font-size:18px;font-weight:700;color:'+color+';margin-top:2px">'+value+'</div></div>';
+}
+
+function promoRenderDetail(p){
+  var today=new Date().toISOString().slice(0,10);
+  var daysLeft=p.endDate?Math.max(0,Math.round((new Date(p.endDate)-new Date(today))/(1000*86400))):null;
+  var dlColor=daysLeft===null?'#6B7280':daysLeft<7?'#B71C1C':daysLeft<14?'#92400E':'#166534';
+
+  var html='<div style="padding:16px 0">'+
+    '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">'+
+      '<div>'+
+        '<input value="'+esc(p.name)+'" onchange="promoUpdateField(\''+p.id+'\',\'name\',this.value)" '+
+          'style="font-size:16px;font-weight:700;color:#1a2e3b;border:none;border-bottom:2px solid #0c7c7c;'+
+          'background:transparent;outline:none;width:400px;padding:2px 4px">'+
+        '<div style="font-size:12px;color:#6B7280;margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
+          (p.supplier?'<span>'+esc(p.supplier)+'</span><span>·</span>':'')+
+          '<input type="date" value="'+(p.startDate||'')+'" onchange="promoUpdateField(\''+p.id+'\',\'startDate\',this.value)" '+
+            'style="border:1px solid #dde3ea;border-radius:6px;padding:4px 8px;font-size:12px;color:#6B7280">'+
+          '<span>to</span>'+
+          '<input type="date" value="'+(p.endDate||'')+'" onchange="promoUpdateField(\''+p.id+'\',\'endDate\',this.value)" '+
+            'style="border:1px solid #dde3ea;border-radius:6px;padding:4px 8px;font-size:12px;color:#6B7280">'+
+          (daysLeft!==null?'<b style="color:'+dlColor+'">'+daysLeft+'d left</b>':'')+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button onclick="promoAddItem(\''+p.id+'\')" style="padding:6px 14px;background:#0c7c7c;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">+ Add Medicine</button>'+
+        '<button onclick="promoDuplicate(\''+p.id+'\')" style="padding:6px 14px;background:#fff;color:#6B7280;border:1px solid #dde3ea;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">📋 Duplicate</button>'+
+        '<button onclick="promoExportExcel(\''+p.id+'\')" style="padding:6px 14px;background:#fff;color:#0c7c7c;border:1px solid #0c7c7c;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">⬇ Excel</button>'+
+        '<button onclick="promoDelete(\''+p.id+'\')" style="padding:6px 12px;background:#fff;color:#B71C1C;border:1px solid #FECACA;border-radius:6px;font-size:12px;cursor:pointer">🗑 Delete</button>'+
+      '</div>'+
+    '</div>';
+
+  var items=p.items||[];
+  var adequate=0,low=0,oos=0,capTied=0;
+  items.forEach(function(item){
+    var m=meds.find(function(x){return normName(x.name)===item.slug;});
+    if(!m) return;
+    var s=statusOf(m);
+    if(s==='ADEQUATE') adequate++; else if(s==='LOW STOCK') low++; else oos++;
+    var c=costOf(m); capTied+=(stockOf(m)||0)*(c&&c.cost?c.cost:0);
+  });
+
+  html+='<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">'+
+    promoStatCard('Medicines',items.length,'#0c7c7c','#F0F9FF')+
+    promoStatCard('Adequate',adequate,'#166534','#F0FDF4')+
+    promoStatCard('Low Stock',low,'#92400E','#FFFBEB')+
+    promoStatCard('Out of Stock',oos,'#B71C1C','#FFF5F5')+
+    promoStatCard('Capital Tied','AED '+Math.round(capTied).toLocaleString(),'#1D4ED8','#EFF6FF')+
+  '</div>';
+
+  if(!items.length){
+    html+='<div style="text-align:center;padding:40px;color:#6B7280;background:#F9FAFB;border-radius:10px;border:2px dashed #E2E8F0">'+
+      '<div style="font-size:2em;margin-bottom:8px">💊</div>'+
+      '<div style="font-size:13px;margin-bottom:12px">No medicines added yet</div>'+
+      '<button onclick="promoAddItem(\''+p.id+'\')" style="padding:8px 20px;background:#0c7c7c;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">+ Add Medicine</button>'+
+    '</div></div>'; return html;
+  }
+
+  html+='<div style="overflow-x:auto;border:1px solid #E2E8F0;border-radius:10px">'+
+    '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
+    '<thead><tr style="background:#F8FAFC">'+
+      '<th style="padding:10px 12px;text-align:left;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Medicine</th>'+
+      '<th style="padding:10px 8px;text-align:left;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Supplier</th>'+
+      '<th style="padding:10px 8px;text-align:center;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Promo Bonus%</th>'+
+      '<th style="padding:10px 8px;text-align:center;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Status</th>'+
+      '<th style="padding:10px 8px;text-align:right;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Stock</th>'+
+      '<th style="padding:10px 8px;text-align:right;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Days Cover</th>'+
+      '<th style="padding:10px 8px;text-align:right;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Price AED</th>'+
+      '<th style="padding:10px 8px;text-align:right;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Cost AED</th>'+
+      '<th style="padding:10px 8px;text-align:right;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Margin%</th>'+
+      '<th style="padding:10px 8px;text-align:left;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Notes</th>'+
+      '<th style="padding:10px 8px;text-align:center;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">✕</th>'+
+    '</tr></thead><tbody>';
+
+  // Group items by supplier
+  var supplierGroups={};
+  var supplierOrder=[];
+  items.forEach(function(item){
+    var sup=item.supplier||'Other';
+    if(!supplierGroups[sup]){ supplierGroups[sup]=[]; supplierOrder.push(sup); }
+    supplierGroups[sup].push(item);
+  });
+
+  // Render one section per supplier
+  supplierOrder.forEach(function(sup){
+    var groupItems=supplierGroups[sup];
+    html+='<tr style="background:#F0F9FF">'+
+      '<td colspan="11" style="padding:8px 12px;font-size:12px;font-weight:700;color:#0369A1">'+
+        '🏢 '+esc(sup)+' — '+groupItems.length+' medicine'+(groupItems.length>1?'s':'')+
+      '</td></tr>';
+    groupItems.forEach(function(item){
+      var globalIdx=items.indexOf(item);
+      var m=meds.find(function(x){return normName(x.name)===item.slug;});
+      var s=m?statusOf(m):'—';
+      var sc=s==='ADEQUATE'?'#166534':s==='LOW STOCK'?'#92400E':s==='OUT OF STOCK'?'#B71C1C':'#6B7280';
+      var sb=s==='ADEQUATE'?'#F0FDF4':s==='LOW STOCK'?'#FFFBEB':s==='OUT OF STOCK'?'#FFF5F5':'#F9FAFB';
+      var stk=m?(stockOf(m)||0):'—';
+      var days=m?(daysCoverDynamic(m)||'—'):'—';
+      var price=m?priceOf(m):'—';
+      var cr=m?costOf(m):null; var cost=cr&&cr.cost?cr.cost.toFixed(2):'—';
+      var margin=m?marginPctOf(m):null;
+      var mrnPct=item.bonusPct||0;
+
+      html+='<tr style="border-top:1px solid #F0F0F0" onmouseover="this.style.background=\'#F8FAFC\'" onmouseout="this.style.background=\'\'">'+
+        '<td style="padding:9px 12px">'+
+          (m?'<span style="font-weight:600;cursor:pointer;color:#0c7c7c" onclick="promoOpenMed(\''+item.slug+'\')">'+esc(item.name)+'</span>':
+             '<span style="font-weight:600;color:#374151">'+esc(item.name)+'</span>'+
+             '<span style="font-size:9px;color:#9CA3AF;margin-left:4px" title="Not in your system">⚠ not in system</span>')+
+        '</td>'+
+        '<td style="padding:9px 8px;font-size:11px;color:#6B7280">'+esc(item.supplier||'—')+'</td>'+
+        '<td style="padding:9px 8px;text-align:center">'+
+          '<input type="number" min="0" max="2000" step="0.1" value="'+mrnPct+'" '+
+            'onchange="promoUpdateBonusPct(\''+p.id+'\','+globalIdx+',this.value)" '+
+            'style="width:70px;text-align:center;border:1px solid #dde3ea;border-radius:6px;'+
+            'padding:4px 6px;font-size:13px;font-weight:700;color:#0c7c7c;background:#F0F9FF">'+
+        '</td>'+
+        '<td style="padding:9px 8px;text-align:center"><span style="background:'+sb+';color:'+sc+';padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">'+s+'</span></td>'+
+        '<td style="padding:9px 8px;text-align:right;font-weight:600">'+(typeof stk==='number'?stk.toLocaleString():stk)+'</td>'+
+        '<td style="padding:9px 8px;text-align:right">'+(typeof days==='number'?days+'d':days)+'</td>'+
+        '<td style="padding:9px 8px;text-align:right">'+price+'</td>'+
+        '<td style="padding:9px 8px;text-align:right">'+cost+'</td>'+
+        '<td style="padding:9px 8px;text-align:right;font-weight:700;color:'+(margin!==null&&margin!==undefined?'#0c7c7c':'#6B7280')+'">'+
+          (margin!==null&&margin!==undefined?margin+'%':'—')+'</td>'+
+        '<td style="padding:9px 8px"><input value="'+esc(item.notes||'')+'" onchange="promoUpdateNote(\''+p.id+'\','+globalIdx+',this.value)" style="border:1px solid #E2E8F0;border-radius:4px;padding:3px 6px;font-size:11px;width:130px"></td>'+
+        '<td style="padding:9px 8px;text-align:center"><button onclick="promoRemoveItem(\''+p.id+'\','+globalIdx+')" style="background:none;border:none;cursor:pointer;color:#B71C1C;font-size:13px">✕</button></td>'+
+      '</tr>';
+    });
+  });
+
+  html+='</tbody></table></div></div>'; return html;
+}
+
+function promoRenderCompare(promos){
+  var modes=[
+    {id:'month', label:'Month vs Month'},
+    {id:'year',  label:'Year vs Year'},
+    {id:'supplier', label:'By Supplier'}
+  ];
+  var html='<div style="padding:16px 0">'+
+    '<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">'+
+      '<div style="font-size:14px;font-weight:700;color:#1a2e3b">⚖️ Compare</div>'+
+      '<div style="display:flex;gap:4px">';
+  modes.forEach(function(mo){
+    var a=_promoCompareMode===mo.id;
+    html+='<div onclick="promoSetCompareMode(\''+mo.id+'\')" style="padding:6px 14px;cursor:pointer;border-radius:6px;font-size:12px;font-weight:600;'+
+      'background:'+(a?'#0c7c7c':'#F0F9FF')+';color:'+(a?'#fff':'#0c7c7c')+';'+
+      'border:1px solid '+(a?'#0c7c7c':'#B5D9D9')+'">'+mo.label+'</div>';
+  });
+  html+='</div></div>'+
+    '<div id="promoCmpResult"><div style="color:#6B7280;font-size:13px;padding:20px 0">Loading…</div></div>'+
+  '</div>';
+
+  // schedule fill after render
+  setTimeout(function(){
+    if(_promoCompareMode==='month') promoRunMonthCompare(promos);
+    else if(_promoCompareMode==='year') promoRunYearCompare(promos);
+    else promoRunSupplierCompare(promos);
+  },0);
+  return html;
+}
+
+function promoRunMonthCompare(promos){
+  // Group promos by YYYY-MM
+  var groups={};
+  var order=[];
+  promos.forEach(function(p){
+    var ym=promoGetYearMonth(p);
+    var key=ym.year+'-'+ym.month;
+    if(!groups[key]){groups[key]=[];order.push(key);}
+    groups[key].push(p);
+  });
+  order.sort();
+  if(order.length<2){
+    var res=document.getElementById('promoCmpResult');
+    if(res) res.innerHTML='<div style="color:#6B7280;font-size:13px">Need promotions in at least 2 different months to compare.</div>';
+    return;
+  }
+  // Build union of medicine slugs
+  var slugMap={};
+  promos.forEach(function(p){(p.items||[]).forEach(function(i){if(!slugMap[i.slug])slugMap[i.slug]={name:i.name,supplier:i.supplier||'Other'};});});
+  // Column header = month label
+  var colLabels=order.map(function(k){var p=k.split('-');return promoMonthLabel(p[1])+' '+p[0];});
+  var colPromos=order.map(function(k){return groups[k];});
+  var html=promoCompareTable(slugMap, colLabels, colPromos, 'month');
+  var res=document.getElementById('promoCmpResult');
+  if(res) res.innerHTML=html;
+}
+
+function promoRunYearCompare(promos){
+  var groups={};
+  var order=[];
+  promos.forEach(function(p){
+    var yr=promoGetYearMonth(p).year;
+    if(!groups[yr]){groups[yr]=[];order.push(yr);}
+    groups[yr].push(p);
+  });
+  order.sort();
+  if(order.length<2){
+    var res=document.getElementById('promoCmpResult');
+    if(res) res.innerHTML='<div style="color:#6B7280;font-size:13px">Need promotions in at least 2 different years to compare.</div>';
+    return;
+  }
+  var slugMap={};
+  promos.forEach(function(p){(p.items||[]).forEach(function(i){if(!slugMap[i.slug])slugMap[i.slug]={name:i.name,supplier:i.supplier||'Other'};});});
+  var colLabels=order;
+  var colPromos=order.map(function(yr){return groups[yr];});
+  var html=promoCompareTable(slugMap, colLabels, colPromos, 'year');
+  var res=document.getElementById('promoCmpResult');
+  if(res) res.innerHTML=html;
+}
+
+function promoRunSupplierCompare(promos){
+  // Aggregate per supplier across all promos: avg bonus%, medicine count
+  var supData={};
+  promos.forEach(function(p){
+    (p.items||[]).forEach(function(i){
+      var sup=i.supplier||'Other';
+      if(!supData[sup]) supData[sup]={totalBonus:0,count:0,meds:new Set()};
+      supData[sup].totalBonus+=i.bonusPct||0;
+      supData[sup].count++;
+      supData[sup].meds.add(i.slug);
+    });
+  });
+  var suppliers=Object.keys(supData).sort();
+  if(!suppliers.length){
+    var res=document.getElementById('promoCmpResult');
+    if(res) res.innerHTML='<div style="color:#6B7280;font-size:13px">No medicines in any promotion yet.</div>';
+    return;
+  }
+  var html='<div style="overflow-x:auto;border:1px solid #E2E8F0;border-radius:10px">'+
+    '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
+    '<thead><tr style="background:#F8FAFC">'+
+      '<th style="padding:10px 12px;text-align:left;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Supplier</th>'+
+      '<th style="padding:10px 8px;text-align:right;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Promos</th>'+
+      '<th style="padding:10px 8px;text-align:right;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Unique Medicines</th>'+
+      '<th style="padding:10px 8px;text-align:right;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Total Lines</th>'+
+      '<th style="padding:10px 8px;text-align:right;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase">Avg Bonus%</th>'+
+    '</tr></thead><tbody>';
+  var promoCounts={};
+  promos.forEach(function(p){(p.items||[]).forEach(function(i){var s=i.supplier||'Other';if(!promoCounts[s])promoCounts[s]=new Set();promoCounts[s].add(p.id);});});
+  suppliers.forEach(function(sup){
+    var d=supData[sup];
+    var avg=d.count?Math.round((d.totalBonus/d.count)*10)/10:0;
+    var pc=(promoCounts[sup]||new Set()).size;
+    html+='<tr style="border-top:1px solid #F0F0F0" onmouseover="this.style.background=\'#F8FAFC\'" onmouseout="this.style.background=\'\'">'+
+      '<td style="padding:9px 12px;font-weight:700;color:#0369A1">🏢 '+esc(sup)+'</td>'+
+      '<td style="padding:9px 8px;text-align:right">'+pc+'</td>'+
+      '<td style="padding:9px 8px;text-align:right">'+d.meds.size+'</td>'+
+      '<td style="padding:9px 8px;text-align:right">'+d.count+'</td>'+
+      '<td style="padding:9px 8px;text-align:right;font-weight:700;color:#0c7c7c">'+avg+'%</td>'+
+    '</tr>';
+  });
+  html+='</tbody></table></div>';
+  var res=document.getElementById('promoCmpResult');
+  if(res) res.innerHTML=html;
+}
+
+function promoCompareTable(slugMap, colLabels, colPromos, mode){
+  // colPromos is array of promo arrays (one per column)
+  var supGroups={};var supOrder=[];
+  Object.entries(slugMap).forEach(function(e){
+    var slug=e[0],info=e[1];var sup=info.supplier||'Other';
+    if(!supGroups[sup]){supGroups[sup]=[];supOrder.push(sup);}
+    supGroups[sup].push({slug:slug,name:info.name});
+  });
+  var totalCols=1+colLabels.length+1;
+  var html='<div style="overflow-x:auto;border:1px solid #E2E8F0;border-radius:10px">'+
+    '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
+    '<thead><tr style="background:#F8FAFC">'+
+    '<th style="padding:10px 12px;text-align:left;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase;min-width:180px">Medicine</th>';
+  colLabels.forEach(function(lbl){
+    html+='<th style="padding:10px 8px;text-align:center;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase;border-left:2px solid #E2E8F0">'+esc(lbl)+'</th>';
+  });
+  html+='<th style="padding:10px 8px;text-align:center;font-size:10px;color:#6B7280;font-weight:700;text-transform:uppercase;border-left:2px solid #E2E8F0">Trend</th></tr></thead><tbody>';
+
+  supOrder.forEach(function(sup){
+    html+='<tr style="background:#F0F9FF"><td colspan="'+totalCols+'" style="padding:8px 12px;font-size:12px;font-weight:700;color:#0369A1">🏢 '+esc(sup)+'</td></tr>';
+    supGroups[sup].forEach(function(entry){
+      var slug=entry.slug,name=entry.name;
+      var m=meds.find(function(x){return normName(x.name)===slug;});
+      var firstB=null,lastB=null;
+      html+='<tr style="border-top:1px solid #F0F0F0" onmouseover="this.style.background=\'#F8FAFC\'" onmouseout="this.style.background=\'\'">'+
+        '<td style="padding:8px 12px;font-weight:600;'+(m?'cursor:pointer;color:#0c7c7c':'color:#374151')+'"'+(m?' onclick="promoOpenMed(\''+slug+'\')"':'')+'>'+esc(name)+'</td>';
+      colPromos.forEach(function(promoArr){
+        var best=null;
+        promoArr.forEach(function(p){
+          var it=(p.items||[]).find(function(i){return i.slug===slug;});
+          if(it&&(best===null||it.bonusPct>best)) best=it.bonusPct;
+        });
+        if(best!==null){
+          if(firstB===null) firstB=best;
+          lastB=best;
+          html+='<td style="padding:8px 8px;text-align:center;font-weight:700;color:#0c7c7c;border-left:2px solid #E2E8F0">'+best+'%</td>';
+        } else {
+          html+='<td style="padding:8px 8px;text-align:center;color:#D1D5DB;border-left:2px solid #E2E8F0">—</td>';
+        }
+      });
+      var trend='—';
+      if(firstB!==null&&lastB!==null&&colPromos.length>1){
+        var diff=lastB-firstB;
+        trend=diff>0?'<span style="color:#166534;font-weight:700">↑ +'+diff+'%</span>':
+              diff<0?'<span style="color:#B71C1C;font-weight:700">↓ '+diff+'%</span>':
+              '<span style="color:#6B7280">→ Same</span>';
+      }
+      html+='<td style="padding:8px 8px;text-align:center;border-left:2px solid #E2E8F0">'+trend+'</td></tr>';
+    });
+  });
+  html+='</tbody></table></div>';
+  return html;
+}
+
+function promoOpenMed(slug){
+  var m=meds.find(function(x){return normName(x.name)===slug;});
+  if(!m) return;
+  _promoActiveId=null;
+  var _ptEl=document.getElementById('promotionsTab');
+  if(_ptEl){_ptEl.style.display='none';_ptEl.innerHTML='';}
+  var _mEl=document.querySelector('main');
+  if(_mEl) _mEl.style.display='';
+  activeTab='ALL';
+  var inp=document.getElementById('search');
+  if(inp) inp.value=m.name;
+  render();
+}
+
+function promoOpenNewModal(){
+  var overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:28px;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto">'+
+    '<h3 style="margin:0 0 20px;color:#1a2e3b;font-size:16px">🎯 New Promotion</h3>'+
+    '<div style="display:grid;gap:14px">'+
+      '<div><label style="font-size:12px;color:#6B7280;display:block;margin-bottom:5px;font-weight:600">Promotion Name *</label>'+
+        '<input id="pmName" type="text" placeholder="e.g. August 2026 — Muscat Pharma" style="width:100%;padding:9px 12px;border:1px solid #dde3ea;border-radius:8px;font-size:13px;box-sizing:border-box"></div>'+
+      '<div><label style="font-size:12px;color:#6B7280;display:block;margin-bottom:5px;font-weight:600">Supplier</label>'+
+        '<input id="pmSupplier" type="text" placeholder="Supplier name" style="width:100%;padding:9px 12px;border:1px solid #dde3ea;border-radius:8px;font-size:13px;box-sizing:border-box"></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
+        '<div><label style="font-size:12px;color:#6B7280;display:block;margin-bottom:5px;font-weight:600">Start Date</label>'+
+          '<input id="pmStart" type="date" style="width:100%;padding:9px 12px;border:1px solid #dde3ea;border-radius:8px;font-size:13px;box-sizing:border-box"></div>'+
+        '<div><label style="font-size:12px;color:#6B7280;display:block;margin-bottom:5px;font-weight:600">End Date</label>'+
+          '<input id="pmEnd" type="date" style="width:100%;padding:9px 12px;border:1px solid #dde3ea;border-radius:8px;font-size:13px;box-sizing:border-box"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;margin-top:22px;justify-content:flex-end">'+
+      '<button onclick="this.closest(\'div\').parentElement.remove()" style="padding:9px 20px;background:#fff;border:1px solid #dde3ea;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+      '<button onclick="promoCreate(this)" style="padding:9px 20px;background:#0c7c7c;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Create Promotion</button>'+
+    '</div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){if(e.target===overlay) overlay.remove();});
+  document.body.appendChild(overlay);
+  document.getElementById('pmName').focus();
+}
+
+function promoCreate(btn){
+  var name=(document.getElementById('pmName')||{}).value||'';
+  var supplier=(document.getElementById('pmSupplier')||{}).value||'';
+  var start=(document.getElementById('pmStart')||{}).value||'';
+  var end=(document.getElementById('pmEnd')||{}).value||'';
+  if(!name.trim()){ alert('Please enter a promotion name'); return; }
+  if(!state.promotions) state.promotions=[];
+  var promo={
+    id:'promo_'+Date.now(), name:name.trim(), supplier:supplier.trim(),
+    startDate:start, endDate:end, status:'Active',
+    createdAt:new Date().toISOString().slice(0,10), items:[]
+  };
+  state.promotions.push(promo);
+  _promoActiveId=promo.id;
+  var _ym=promoGetYearMonth(promo);
+  _promoActiveYear=_ym.year; _promoActiveMonth=_ym.month;
+  btn.closest('div').parentElement.remove();
+  renderPromotionsTab();
+  if(typeof toast==='function') toast('Promotion created — add medicines with + Add Medicine');
+}
+
+function promoAddItem(promoId){
+  var overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML='<div style="background:#fff;border-radius:14px;padding:28px;width:480px;max-width:95vw">'+
+    '<h3 style="margin:0 0 20px;color:#1a2e3b;font-size:16px">Add Medicine to Promotion</h3>'+
+    '<div style="display:grid;gap:14px">'+
+      '<div style="position:relative">'+
+        '<label style="font-size:12px;color:#6B7280;display:block;margin-bottom:5px;font-weight:600">Medicine Name *</label>'+
+        '<input id="piMed" type="text" placeholder="Type to search..." autocomplete="off" '+
+          'oninput="promoMedAc(this.value)" '+
+          'style="width:100%;padding:9px 12px;border:1px solid #dde3ea;border-radius:8px;font-size:13px;box-sizing:border-box">'+
+        '<div id="piAcDrop" style="position:absolute;left:0;right:0;top:100%;background:#fff;'+
+          'border:1px solid #dde3ea;border-top:none;border-radius:0 0 8px 8px;max-height:180px;'+
+          'overflow-y:auto;display:none;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,0.1)"></div>'+
+      '</div>'+
+      '<div><label style="font-size:12px;color:#6B7280;display:block;margin-bottom:5px;font-weight:600">Supplier Bonus % for this promotion</label>'+
+        '<input id="piBonusPct" type="number" min="0" max="2000" step="0.1" placeholder="e.g. 85" '+
+          'style="width:100%;padding:9px 12px;border:1px solid #dde3ea;border-radius:8px;font-size:13px;box-sizing:border-box"></div>'+
+      '<div><label style="font-size:12px;color:#6B7280;display:block;margin-bottom:5px;font-weight:600">Notes (optional)</label>'+
+        '<input id="piNotes" type="text" placeholder="e.g. Min order 100 units, expiry check" '+
+          'style="width:100%;padding:9px 12px;border:1px solid #dde3ea;border-radius:8px;font-size:13px;box-sizing:border-box"></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;margin-top:22px;justify-content:flex-end">'+
+      '<button onclick="this.closest(\'div\').parentElement.remove()" style="padding:9px 20px;background:#fff;border:1px solid #dde3ea;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+      '<button onclick="promoSaveItem(\''+promoId+'\',this)" style="padding:9px 20px;background:#0c7c7c;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Add Medicine</button>'+
+    '</div>'+
+  '</div>';
+  overlay.addEventListener('click',function(e){if(e.target===overlay) overlay.remove();});
+  document.body.appendChild(overlay);
+  document.getElementById('piMed').focus();
+}
+
+function promoMedAc(q){
+  var drop=document.getElementById('piAcDrop');
+  if(!drop) return;
+  if(!q||q.length<2){ drop.style.display='none'; return; }
+  var results=meds.filter(function(m){ return (m.name||'').toLowerCase().includes(q.toLowerCase()); }).slice(0,8);
+  if(!results.length){ drop.style.display='none'; return; }
+  drop.innerHTML=results.map(function(m){
+    var s=statusOf(m);
+    var sc=s==='ADEQUATE'?'#166534':s==='LOW STOCK'?'#92400E':'#B71C1C';
+    var safeName=m.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return '<div onclick="(function(){'+
+      'var inp=document.getElementById(\'piMed\');'+
+      'inp.value=\''+safeName+'\';'+
+      'inp.dataset.slug=\''+normName(m.name)+'\';'+
+      'document.getElementById(\'piAcDrop\').style.display=\'none\';'+
+      '})()" '+
+      'onmouseover="this.style.background=\'#F0F9FF\'" onmouseout="this.style.background=\'\'" '+
+      'style="padding:9px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:12px;border-bottom:1px solid #F0F0F0">'+
+      '<span style="color:'+sc+';font-size:9px">●</span>'+
+      '<span style="flex:1;font-weight:600">'+esc(m.name)+'</span>'+
+      '<span style="color:'+sc+';font-size:10px;font-weight:700">'+s+'</span>'+
+    '</div>';
+  }).join('');
+  drop.style.display='block';
+}
+
+function promoSaveItem(promoId,btn){
+  var medInp=document.getElementById('piMed');
+  var name=medInp?(medInp.value||'').trim():'';
+  var slug=medInp&&medInp.dataset.slug?medInp.dataset.slug:normName(name);
+  var bonusPct=parseFloat((document.getElementById('piBonusPct')||{}).value||0)||0;
+  var notes=((document.getElementById('piNotes')||{}).value||'').trim();
+  if(!name){ alert('Please select a medicine from the list'); return; }
+  var p=(state.promotions||[]).find(function(x){return x.id===promoId;});
+  if(!p) return;
+  if(!p.items) p.items=[];
+  if(p.items.find(function(i){return i.slug===slug;})){ alert('This medicine is already in this promotion'); return; }
+  p.items.push({slug:slug, name:name, bonusPct:bonusPct, notes:notes});
+  btn.closest('div').parentElement.remove();
+  renderPromotionsTab();
+  if(typeof toast==='function') toast('Medicine added: '+name);
+}
+
+function promoUpdateNote(promoId,idx,val){
+  var p=(state.promotions||[]).find(function(x){return x.id===promoId;});
+  if(p&&p.items&&p.items[idx]) p.items[idx].notes=val;
+}
+
+function promoRemoveItem(promoId,idx){
+  var p=(state.promotions||[]).find(function(x){return x.id===promoId;});
+  if(!p||!p.items) return;
+  p.items.splice(idx,1);
+  renderPromotionsTab();
+  if(typeof toast==='function') toast('Medicine removed from promotion');
+}
+
+function promoDelete(promoId){
+  if(!confirm('Delete this promotion? This cannot be undone.')) return;
+  state.promotions=(state.promotions||[]).filter(function(p){return p.id!==promoId;});
+  _promoActiveId='compare';
+  renderPromotionsTab();
+  if(typeof toast==='function') toast('Promotion deleted');
+}
+
+function promoImportFile(){
+  var inp=document.createElement('input');
+  inp.type='file'; inp.accept='.xlsx,.xls,.csv,.pdf';
+  inp.onchange=function(e){
+    var file=e.target.files[0]; if(!file) return;
+    var ext=file.name.split('.').pop().toLowerCase();
+    if(ext==='pdf') promoImportPdf(file);
+    else promoImportExcel(file);
+  };
+  inp.click();
+}
+
+function promoImportExcel(file){
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+      promoParseRows(rows,file.name);
+    }catch(err){ alert('Could not read file: '+err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function promoImportPdf(file){
+  if(!window.pdfjsLib){ alert('PDF reader not available'); return; }
+  var reader=new FileReader();
+  reader.onload=function(e){
+    pdfjsLib.getDocument({data:new Uint8Array(e.target.result)}).promise.then(function(pdf){
+      var texts=[]; var done=0;
+      for(var i=1;i<=pdf.numPages;i++){
+        (function(pn){
+          pdf.getPage(pn).then(function(page){
+            page.getTextContent().then(function(tc){
+              texts.push(tc.items.map(function(x){return x.str;}).join(' '));
+              done++;
+              if(done===pdf.numPages) promoParsePdfText(texts.join('\n'),file.name);
+            });
+          });
+        })(i);
+      }
+    }).catch(function(err){alert('PDF error: '+err.message);});
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function promoParseRows(rows,fileName){
+  var items=[];
+  rows.forEach(function(row){
+    // Column A: Medicine Name, B: Bonus %, C: Supplier, D: Notes
+    var vals=Object.values(row);
+    var name=String(row['Medicine Name']||vals[0]||'').trim();
+    if(!name||name.length<2) return;
+    var bonusPct=parseFloat(String(row['Bonus %']||vals[1]||0))||0;
+    var supplier=String(row['Supplier']||row['supplier']||vals[2]||'').trim();
+    var notes=String(row['Notes']||vals[3]||'').trim();
+
+    // Pass 1: exact slug match against BASE_DATA
+    var rawSlug=normName(name);
+    var matched=meds.find(function(m){ return normName(m.name)===rawSlug; });
+
+    // Pass 2: similarity-based match
+    // Only match if promo slug and BASE_DATA slug are within 3 chars of each other in length
+    // This prevents GLIMELIFE 2MG matching GLIMELIFE 4MG, HENACYL 3S matching 6S etc.
+    if(!matched && rawSlug.length>=8){
+      matched=meds.find(function(m){
+        var bs=normName(m.name);
+        return (bs.indexOf(rawSlug)===0||rawSlug.indexOf(bs)===0) && Math.abs(bs.length-rawSlug.length)<=3;
+      });
+    }
+
+    var finalName=matched?matched.name:name;
+    var finalSlug=matched?normName(matched.name):rawSlug;
+
+    if(finalSlug&&!items.find(function(i){return i.slug===finalSlug;})){
+      items.push({slug:finalSlug, name:finalName, bonusPct:bonusPct,
+        supplier:supplier, notes:notes, inSystem:!!matched});
+    }
+  });
+  if(!items.length){ alert('No medicines found. Expected column A: Medicine Name, column B: Bonus %'); return; }
+  promoCreateFromImport(items,fileName);
+}
+
+function promoParsePdfText(text,fileName){
+  var items=[];
+  var lines=text.split(/[\n\r]+/).map(function(l){return l.trim();}).filter(Boolean);
+  lines.forEach(function(line){
+    var matched=meds.find(function(m){
+      var mname=(m.name||'').toUpperCase();
+      var firstWord=mname.split(' ')[0];
+      return firstWord.length>3&&line.toUpperCase().includes(firstWord);
+    });
+    if(!matched) return;
+    var slug=normName(matched.name);
+    if(items.find(function(i){return i.slug===slug;})) return;
+    var bonusMatch=line.match(/(\d+(?:\.\d+)?)\s*%/);
+    var bonusPct=bonusMatch?parseFloat(bonusMatch[1]):0;
+    items.push({slug:slug,name:matched.name,bonusPct:bonusPct,notes:''});
+  });
+  if(!items.length){ alert('Could not extract medicines from PDF. Try Excel format instead.'); return; }
+  promoCreateFromImport(items,fileName);
+}
+
+function promoCreateFromImport(items,fileName){
+  var name=fileName.replace(/\.[^.]+$/,'').replace(/[_-]/g,' ').trim();
+  var promo={
+    id:'promo_'+Date.now(), name:name, supplier:'',
+    startDate:new Date().toISOString().slice(0,10), endDate:'',
+    status:'Active', createdAt:new Date().toISOString().slice(0,10), items:items
+  };
+  if(!state.promotions) state.promotions=[];
+  state.promotions.push(promo);
+  _promoActiveId=promo.id;
+  var _iym=promoGetYearMonth(promo);
+  _promoActiveYear=_iym.year; _promoActiveMonth=_iym.month;
+  renderPromotionsTab();
+  if(typeof toast==='function') toast(items.length+' medicines imported — update promotion name and dates above');
+}
+
+function promoExportExcel(promoId){
+  var p=(state.promotions||[]).find(function(x){return x.id===promoId;}); if(!p) return;
+  var detailHeaders=['Supplier','Medicine','Promo Bonus %','Stock Status','Current Stock','Days Cover',
+                     'Price AED','Cost AED','Margin %','Notes'];
+  var colWidths=[{wch:30},{wch:35},{wch:14},{wch:14},{wch:14},{wch:12},{wch:12},{wch:12},{wch:12},{wch:30}];
+
+  // Sort items by supplier
+  var sortedItems=(p.items||[]).slice().sort(function(a,b){
+    return (a.supplier||'Other').localeCompare(b.supplier||'Other');
+  });
+
+  // Build main sheet rows with blank separator between supplier groups
+  var detailRows=[];
+  var lastSup=null;
+  sortedItems.forEach(function(item){
+    var sup=item.supplier||'Other';
+    if(lastSup!==null&&sup!==lastSup) detailRows.push([]); // blank separator
+    lastSup=sup;
+    var m=meds.find(function(x){return normName(x.name)===item.slug;});
+    var cr=m?costOf(m):null;
+    detailRows.push([
+      sup, item.name, item.bonusPct,
+      m?statusOf(m):'—', m?(stockOf(m)||0):'—',
+      m?(daysCoverDynamic(m)||'—'):'—', m?priceOf(m):'—',
+      cr&&cr.cost?cr.cost.toFixed(2):'—',
+      m?(marginPctOf(m)||'—'):'—',
+      item.notes||''
+    ]);
+  });
+
+  var wb=XLSX.utils.book_new();
+  var ws=XLSX.utils.aoa_to_sheet([detailHeaders].concat(detailRows));
+  ws['!cols']=colWidths;
+  XLSX.utils.book_append_sheet(wb,ws,'Promotion Details');
+
+  // Summary sheet
+  var sumWs=XLSX.utils.aoa_to_sheet([
+    ['Promotion','Supplier','Start Date','End Date','Status','Total Medicines'],
+    [p.name,p.supplier||'',p.startDate||'',p.endDate||'',p.status,(p.items||[]).length]
+  ]);
+  sumWs['!cols']=[{wch:30},{wch:30},{wch:14},{wch:14},{wch:12},{wch:16}];
+  XLSX.utils.book_append_sheet(wb,sumWs,'Summary');
+
+  // Per-supplier sheets
+  var supGroups={};
+  var supOrder=[];
+  sortedItems.forEach(function(item){
+    var sup=item.supplier||'Other';
+    if(!supGroups[sup]){ supGroups[sup]=[]; supOrder.push(sup); }
+    supGroups[sup].push(item);
+  });
+  var sheetHeaders=['Medicine','Promo Bonus %','Stock Status','Current Stock','Days Cover',
+                    'Price AED','Cost AED','Margin %','Notes'];
+  var sheetColWidths=[{wch:35},{wch:14},{wch:14},{wch:14},{wch:12},{wch:12},{wch:12},{wch:12},{wch:30}];
+  supOrder.forEach(function(sup){
+    var supRows=supGroups[sup].map(function(item){
+      var m=meds.find(function(x){return normName(x.name)===item.slug;});
+      var cr=m?costOf(m):null;
+      return [item.name, item.bonusPct,
+        m?statusOf(m):'—', m?(stockOf(m)||0):'—',
+        m?(daysCoverDynamic(m)||'—'):'—', m?priceOf(m):'—',
+        cr&&cr.cost?cr.cost.toFixed(2):'—',
+        m?(marginPctOf(m)||'—'):'—',
+        item.notes||''];
+    });
+    var supWs=XLSX.utils.aoa_to_sheet([sheetHeaders].concat(supRows));
+    supWs['!cols']=sheetColWidths;
+    // Sheet names max 31 chars, no special chars
+    var sheetName=sup.replace(/[:\\\/\?\*\[\]]/g,'').slice(0,31);
+    XLSX.utils.book_append_sheet(wb,supWs,sheetName);
+  });
+
+  var today=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,'Vitals_Promo_'+(p.name||'export').replace(/\s+/g,'_')+'_'+today+'.xlsx');
+  if(typeof toast==='function') toast('Exported: '+p.name);
+}
+
+function promoDuplicate(promoId){
+  var p=(state.promotions||[]).find(function(x){return x.id===promoId;});
+  if(!p) return;
+  var copy=JSON.parse(JSON.stringify(p));
+  copy.id='promo_'+Date.now();
+  copy.name=p.name+' — Copy';
+  copy.startDate='';
+  copy.endDate='';
+  copy.createdAt=new Date().toISOString().slice(0,10);
+  copy.status='Active';
+  if(!state.promotions) state.promotions=[];
+  state.promotions.push(copy);
+  _promoActiveId=copy.id;
+  renderPromotionsTab();
+  if(typeof toast==='function') toast('Duplicated — update name and dates for the new month');
+}
+
+function promoUpdateBonusPct(promoId,idx,val){
+  var p=(state.promotions||[]).find(function(x){return x.id===promoId;});
+  if(!p||!p.items||!p.items[idx]) return;
+  p.items[idx].bonusPct=parseFloat(val)||0;
+  renderPromotionsTab();
+}
+
+function promoUpdateField(promoId,field,val){
+  var p=(state.promotions||[]).find(function(x){return x.id===promoId;});
+  if(!p) return;
+  p[field]=val;
+  var today=new Date().toISOString().slice(0,10);
+  if(p.startDate&&p.endDate){
+    if(p.endDate<today) p.status='Expired';
+    else if(p.startDate>today) p.status='Upcoming';
+    else p.status='Active';
+  }
+  renderPromotionsTab();
 }
 </script>
 </body>
