@@ -357,30 +357,37 @@ var pharmacies = [];
 var currentSheet = '';
 
 /* ── Load data ── */
+var PHARMACY_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRa_qy4P3Uk_Fl5tSK6-o1-DzBrab2nU7eAg0jP2pIxtQZ6D3B4ZuXilyDn_mvjRrPiF0MVnr5v6Dsu/pub?gid=306456544&single=true&output=csv';
+
 function loadData() {
-  // Try loading from vitals_state.json (same repo)
-  fetch('./vitals_state.json')
+  // Load medicines from vitals_state.json and pharmacies from Google Sheet CSV in parallel
+  var medPromise = fetch('./vitals_state.json')
     .then(function(r){ return r.json(); })
     .then(function(data){
-      // Extract medicines
       if (data.medicines && Array.isArray(data.medicines)) {
         medicines = data.medicines.map(function(m){
           return { name: m.name || m.n || '', status: m.status || m.s || 'ok',
             supplier: m.supplier || m.sup || '' };
         }).filter(function(m){ return m.name; });
       }
-      // Extract pharmacies if available
-      if (data.pharmacies && Array.isArray(data.pharmacies)) {
-        pharmacies = data.pharmacies.map(function(p){ return p.name || p.n || p; }).filter(Boolean);
-      } else if (data.suppliers && Array.isArray(data.suppliers)) {
-        pharmacies = data.suppliers.map(function(s){ return s.name || s.n || s; }).filter(Boolean);
-      }
-      init();
     })
-    .catch(function(){
-      medicines = []; pharmacies = [];
-      init();
-    });
+    .catch(function(){ medicines = []; });
+
+  var pharPromise = fetch(PHARMACY_CSV_URL)
+    .then(function(r){ return r.text(); })
+    .then(function(csv){
+      // Parse CSV — take first non-empty column value from each row, skip header row
+      var lines = csv.split('\n');
+      pharmacies = [];
+      for (var i = 1; i < lines.length; i++) {
+        var cols = lines[i].split(',');
+        var name = cols[0] ? cols[0].replace(/^"|"$/g,'').trim() : '';
+        if (name) pharmacies.push(name);
+      }
+    })
+    .catch(function(){ pharmacies = []; });
+
+  Promise.all([medPromise, pharPromise]).then(function(){ init(); });
 }
 
 function init() {
