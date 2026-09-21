@@ -704,7 +704,15 @@ function submitForm() {
 
   var url = SUBMIT_URL + '?data=' + encodeURIComponent(JSON.stringify(payload));
   fetch(url)
-  .then(function(){ showSuccess(); })
+  .then(function(r){ return r.json(); })
+  .then(function(json){
+    if (json && json.status === 'ok') {
+      showSuccess();
+    } else {
+      btn.disabled=false; btn.innerHTML='<span>📤</span> Submit Request';
+      alert('Submission error: ' + (json && json.message ? json.message : 'Unknown error. Please try again.'));
+    }
+  })
   .catch(function(){
     btn.disabled=false; btn.innerHTML='<span>📤</span> Submit Request';
     alert('Could not submit. Please check your connection and try again.');
