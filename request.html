@@ -150,6 +150,15 @@ body{
 .qval{width:48px;text-align:center;font-size:16px;font-weight:700;color:var(--ink);
   border-left:1px solid var(--line);border-right:1px solid var(--line);
   height:40px;line-height:40px;}
+/* ── Other‑input row (appears inside card when "Other" is selected) ── */
+.other-row{display:none;padding:10px 16px 14px;border-top:1px solid var(--line);background:var(--accent-lt);}
+.other-row.vis{display:block;}
+.other-row label{font-size:10.5px;color:var(--accent);font-weight:700;text-transform:uppercase;
+  letter-spacing:.07em;display:block;margin-bottom:6px;}
+.other-row input,.other-row textarea{width:100%;border:1.5px solid var(--accent);border-radius:9px;
+  padding:9px 12px;font-family:inherit;font-size:13px;color:var(--ink);background:var(--panel);
+  outline:none;line-height:1.5;resize:vertical;}
+.other-row input::placeholder,.other-row textarea::placeholder{color:var(--faint);}
 /* ── Notes ── */
 .notes-card{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);
   padding:14px 16px;margin-bottom:10px;}
@@ -255,6 +264,11 @@ var ISSUE_TYPES = [
       </div>
       <div class="fchev">›</div>
     </div>
+    <div class="other-row" id="repOtherRow">
+      <label>Your actual name *</label>
+      <input type="text" id="repOtherInput" placeholder="Type your full name…"
+        oninput="state.repOther=this.value.trim();updateProg()">
+    </div>
     <div class="frow" id="emirateRow" onclick="openSheet('emirate')">
       <div class="fi">📍</div>
       <div class="fc">
@@ -271,6 +285,11 @@ var ISSUE_TYPES = [
       </div>
       <div class="fchev">›</div>
     </div>
+    <div class="other-row" id="pharmacyOtherRow">
+      <label>Pharmacy name (custom) *</label>
+      <input type="text" id="pharmacyOtherInput" placeholder="Type the exact pharmacy name…"
+        oninput="state.pharmacyOther=this.value.trim();updateProg()">
+    </div>
   </div>
 
   <!-- MEDICINE -->
@@ -281,7 +300,7 @@ var ISSUE_TYPES = [
       <div class="fi">💊</div>
       <div class="fc">
         <div class="flabel">Medicine Name *</div>
-        <div class="fval ph" id="medVal">Search from 1,992 medicines…</div>
+        <div class="fval ph" id="medVal">Loading medicines…</div>
       </div>
       <div class="fchev">›</div>
     </div>
@@ -300,6 +319,11 @@ var ISSUE_TYPES = [
   <div class="chips-wrap">
     <div class="chips-lbl">What's the issue? *</div>
     <div class="chips" id="chipsContainer"></div>
+    <div class="other-row" id="issueOtherRow" style="margin:10px -16px -14px;border-radius:0 0 var(--r) var(--r);">
+      <label>Describe the issue *</label>
+      <textarea id="issueOtherInput" placeholder="Please describe the issue in a few words…" rows="2"
+        oninput="state.issueOther=this.value.trim();updateProg()"></textarea>
+    </div>
   </div>
 
   <!-- PRIORITY -->
@@ -347,10 +371,11 @@ var ISSUE_TYPES = [
 
 <script>
 var state = {
-  rep: '', emirate: '', pharmacy: '', pharmacyOther: '',
+  rep: '', repOther: '',
+  emirate: '', pharmacy: '', pharmacyOther: '',
   medicine: '', medicineOther: '', medicineStatus: '',
-  issueType: '', priority: 'medium',
-  qty: 1, notes: ''
+  issueType: '', issueOther: '',
+  priority: 'medium', qty: 1, notes: ''
 };
 var medicines = [];
 var pharmacies = [];
@@ -394,8 +419,11 @@ function init() {
   document.getElementById('loadingState').style.display = 'none';
   document.getElementById('mainForm').style.display = 'block';
   // Update medicine count label
+  var medEl = document.getElementById('medVal');
   if (medicines.length) {
-    document.querySelector('#medRow .fval').textContent = 'Search from '+medicines.length+' medicines…';
+    medEl.textContent = 'Search from ' + medicines.length.toLocaleString() + ' medicines…';
+  } else {
+    medEl.textContent = 'Type any medicine name…';
   }
   buildChips();
   updateProg();
@@ -475,7 +503,8 @@ function renderMedList(q) {
       + (m.supplier?'<div class="opt-sub">'+esc(m.supplier)+'</div>':'')
       + '</div>'+ sp +'</div>';
   });
-  if (!q && medicines.length) html += '<div style="padding:12px 18px;font-size:11px;color:var(--faint);text-align:center">Start typing to search all '+medicines.length+' medicines</div>';
+  if (!q && medicines.length) html += '<div style="padding:12px 18px;font-size:11px;color:var(--faint);text-align:center">Start typing to search all '+medicines.length.toLocaleString()+' medicines</div>';
+  if (!q && !medicines.length) html += '<div style="padding:20px 18px;font-size:13px;color:var(--muted);text-align:center">Type the medicine name above</div>';
   document.getElementById('sheetList').innerHTML = html;
 }
 
@@ -531,8 +560,18 @@ function pickOption(type, value, el, status, sub, isCustom) {
     }
   } else if (type === 'rep') {
     state.rep = value;
+    state.repOther = '';
     document.getElementById('repVal').textContent = value;
     document.getElementById('repVal').classList.remove('ph');
+    var repOtherRow = document.getElementById('repOtherRow');
+    var repOtherInput = document.getElementById('repOtherInput');
+    if (value === 'Other') {
+      repOtherRow.classList.add('vis');
+      repOtherInput.value = '';
+      setTimeout(function(){ repOtherInput.focus(); }, 350);
+    } else {
+      repOtherRow.classList.remove('vis');
+    }
   } else if (type === 'emirate') {
     state.emirate = value;
     document.getElementById('emirateVal').textContent = value;
@@ -542,6 +581,16 @@ function pickOption(type, value, el, status, sub, isCustom) {
     state.pharmacyOther = isCustom ? value : '';
     document.getElementById('pharmacyVal').textContent = value;
     document.getElementById('pharmacyVal').classList.remove('ph');
+    var pharOtherRow = document.getElementById('pharmacyOtherRow');
+    var pharOtherInput = document.getElementById('pharmacyOtherInput');
+    if (value === 'Other' || isCustom) {
+      pharOtherRow.classList.add('vis');
+      pharOtherInput.value = isCustom ? value : '';
+      state.pharmacyOther = isCustom ? value : '';
+      setTimeout(function(){ pharOtherInput.focus(); }, 350);
+    } else {
+      pharOtherRow.classList.remove('vis');
+    }
   }
   updateProg();
   // Small delay then close for feedback
@@ -561,6 +610,16 @@ function selChip(el, label) {
   document.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('sel'); });
   el.classList.add('sel');
   state.issueType = label;
+  state.issueOther = '';
+  var issueOtherRow = document.getElementById('issueOtherRow');
+  var issueOtherInput = document.getElementById('issueOtherInput');
+  if (label === 'Other') {
+    issueOtherRow.classList.add('vis');
+    issueOtherInput.value = '';
+    setTimeout(function(){ issueOtherInput.focus(); }, 100);
+  } else {
+    issueOtherRow.classList.remove('vis');
+  }
   updateProg();
 }
 
@@ -591,24 +650,39 @@ function updateProg() {
 /* ── Submit ── */
 function submitForm() {
   if (!state.rep) { shake('repRow'); alert('Please select your name.'); return; }
+  if (state.rep === 'Other' && !state.repOther) {
+    document.getElementById('repOtherInput').focus();
+    alert('Please type your actual name.'); return;
+  }
   if (!state.emirate) { shake('emirateRow'); alert('Please select an emirate.'); return; }
   if (!state.pharmacy) { shake('pharmacyRow'); alert('Please enter the pharmacy name.'); return; }
+  if ((state.pharmacy === 'Other') && !state.pharmacyOther) {
+    document.getElementById('pharmacyOtherInput').focus();
+    alert('Please type the pharmacy name.'); return;
+  }
   if (!state.medicine) { shake('medRow'); alert('Please select a medicine.'); return; }
   if (!state.issueType) { document.getElementById('chipsContainer').style.boxShadow='0 0 0 2px var(--err)'; alert('Please select an issue type.'); return; }
+  if (state.issueType === 'Other' && !state.issueOther) {
+    document.getElementById('issueOtherInput').focus();
+    alert('Please describe the issue.'); return;
+  }
 
   var btn = document.getElementById('submitBtn');
   btn.disabled = true;
   btn.innerHTML = '<span>⏳</span> Submitting…';
 
+  var repName = (state.rep === 'Other' && state.repOther) ? state.repOther : state.rep;
+  var issueLabel = (state.issueType === 'Other' && state.issueOther) ? ('Other: ' + state.issueOther) : state.issueType;
+  var pharmacyName = (state.pharmacy === 'Other' && state.pharmacyOther) ? state.pharmacyOther : state.pharmacy;
   var payload = {
     timestamp: new Date().toISOString(),
-    rep: state.rep,
+    rep: repName,
     emirate: state.emirate,
-    pharmacy: state.pharmacy,
+    pharmacy: pharmacyName,
     pharmacyOther: state.pharmacyOther,
     medicine: state.medicine,
     medicineOther: state.medicineOther,
-    issueType: state.issueType,
+    issueType: issueLabel,
     qty: state.qty,
     priority: state.priority,
     notes: document.getElementById('notesField').value.trim(),
@@ -645,10 +719,17 @@ function showSuccess() {
 }
 
 function resetForm() {
-  state = { rep:state.rep, emirate:state.emirate, pharmacy:'', pharmacyOther:'',
-    medicine:'', medicineOther:'', medicineStatus:'', issueType:'', priority:'medium', qty:1, notes:'' };
+  state = { rep:state.rep, repOther:'', emirate:state.emirate, pharmacy:'', pharmacyOther:'',
+    medicine:'', medicineOther:'', medicineStatus:'', issueType:'', issueOther:'',
+    priority:'medium', qty:1, notes:'' };
   document.getElementById('pharmacyVal').textContent='Search pharmacy…'; document.getElementById('pharmacyVal').className='fval ph';
-  document.getElementById('medVal').textContent='Search from '+medicines.length+' medicines…'; document.getElementById('medVal').className='fval ph';
+  document.getElementById('pharmacyOtherRow').classList.remove('vis');
+  document.getElementById('pharmacyOtherInput').value='';
+  document.getElementById('issueOtherRow').classList.remove('vis');
+  document.getElementById('issueOtherInput').value='';
+  var medCount = medicines.length ? medicines.length.toLocaleString() : '';
+  document.getElementById('medVal').textContent = medCount ? 'Search from '+medCount+' medicines…' : 'Type any medicine name…';
+  document.getElementById('medVal').className='fval ph';
   document.getElementById('medAlert').className='alert-banner'; document.getElementById('medAlert').style.display='';
   document.getElementById('notesField').value='';
   document.getElementById('qtyVal').textContent='1';
