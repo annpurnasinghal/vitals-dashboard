@@ -207,7 +207,7 @@ var SUBMIT_URL = 'https://script.google.com/macros/s/AKfycbyqvYbm5qT4LjdbujMU2JO
 // (No change needed — the dashboard reads the same sheet this form writes to)
 
 var REPS = [
-  'Abhilash','Anwar','Jaseer','Liaquat','Mohammad',
+  'Abhilash','Anwar','Fayez','Jaseer','Liaquat','Mohammad',
   'Muhammed Fayez','Pradeep','Ravi','Shakeeb',
   'Shany Joseph','Sharafudheen','Other'
 ];
@@ -382,18 +382,25 @@ var pharmacies = [];
 var currentSheet = '';
 
 /* ── Load data ── */
+var MEDICINE_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRa_qy4P3Uk_Fl5tSK6-o1-DzBrab2nU7eAg0jP2pIxtQZ6D3B4ZuXilyDn_mvjRrPiF0MVnr5v6Dsu/pub?gid=510515536&single=true&output=csv';
 var PHARMACY_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRa_qy4P3Uk_Fl5tSK6-o1-DzBrab2nU7eAg0jP2pIxtQZ6D3B4ZuXilyDn_mvjRrPiF0MVnr5v6Dsu/pub?gid=306456544&single=true&output=csv';
 
 function loadData() {
-  // Load medicines from vitals_state.json and pharmacies from Google Sheet CSV in parallel
-  var medPromise = fetch('./vitals_state.json')
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if (data.medicines && Array.isArray(data.medicines)) {
-        medicines = data.medicines.map(function(m){
-          return { name: m.name || m.n || '', status: m.status || m.s || 'ok',
-            supplier: m.supplier || m.sup || '' };
-        }).filter(function(m){ return m.name; });
+  // Load medicines from Google Sheet CSV
+  var medPromise = fetch(MEDICINE_CSV_URL)
+    .then(function(r){ return r.text(); })
+    .then(function(csv){
+      var lines = csv.split('\n');
+      medicines = [];
+      for (var i = 1; i < lines.length; i++) {
+        var cols = lines[i].split(',');
+        var name = cols[0] ? cols[0].replace(/^"|"$/g,'').trim() : '';
+        if (!name || name.toLowerCase().indexOf('other') === 0 || name.indexOf('DELETED') !== -1) continue;
+        var rawStatus = cols[1] ? cols[1].replace(/^"|"$/g,'').trim().toUpperCase() : '';
+        var status = (rawStatus.indexOf('OUT') !== -1 || rawStatus === 'OOS') ? 'oos'
+          : (rawStatus.indexOf('LOW') !== -1) ? 'low' : 'ok';
+        var supplier = cols[2] ? cols[2].replace(/^"|"$/g,'').trim() : '';
+        medicines.push({ name: name, status: status, supplier: supplier });
       }
     })
     .catch(function(){ medicines = []; });
