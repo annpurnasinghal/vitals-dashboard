@@ -168,8 +168,9 @@ if (window.pdfjsLib) {
   .import-dd-item:hover{background:var(--new-bg);color:var(--accent-dk)}
 
   /* smart autocomplete */
-  .ac-wrap{position:relative;display:inline-block}
-  .ac-drop{position:absolute;top:100%;left:0;right:0;margin-top:2px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.18);z-index:60;max-height:240px;overflow-y:auto;padding:4px 0;display:none}
+  .ac-wrap{position:relative;display:inline-block;z-index:65}
+  .sup-search-row{position:relative;z-index:70}
+  .ac-drop{position:absolute;top:100%;left:0;right:0;margin-top:2px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.22);z-index:9999;max-height:300px;overflow-y:auto;padding:4px 0;display:none}
   .ac-drop.show{display:block}
   .ac-item{padding:8px 14px;font-size:13px;cursor:pointer;color:var(--ink);border-bottom:1px solid #f5f5f5}
   .ac-item:last-child{border-bottom:none}
@@ -922,7 +923,20 @@ if (window.pdfjsLib) {
   .tv-pill-btn.active{background:rgba(255,255,255,.18);color:#fff}
   .tv-pill-btn:hover:not(.active){color:rgba(255,255,255,.85)}
   #deadstockTab{flex:1;min-height:calc(100vh - 120px);background:var(--bg,#f5f7fa);margin-top:0;padding-top:16px}
-</style>
+
+  /* ---- metric info toggles ---- */
+  .metric-info-btn{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#e8f0f0;color:#0c7c7c;font-size:9px;font-weight:700;border:1px solid #c8dede;cursor:pointer;margin-left:3px;vertical-align:middle;line-height:1;font-family:inherit;padding:0;flex-shrink:0}
+  .metric-info-btn:hover{background:#d0e6e6}
+  .metric-info-box{display:none;background:linear-gradient(135deg,#f0f7f7,#f5fafe);border:1px solid #c8dede;border-radius:10px;padding:12px 16px;margin:8px 0 10px;font-size:12.5px;line-height:1.7;color:#2d4a4a;max-width:500px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+  .metric-info-box.show{display:block}
+  .metric-info-box .mib-title{font-weight:700;color:#0c7c7c;font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+  .metric-info-box .mib-formula{font-family:'SF Mono',Consolas,monospace;background:#e0eded;padding:4px 10px;border-radius:6px;display:inline-block;margin:4px 0;font-size:11.5px;letter-spacing:.01em}
+  .metric-info-box .mib-example{color:#555;font-style:italic;margin-top:4px;padding-left:2px}
+  .metric-info-box .mib-use{color:#1a6b4a;font-weight:600;margin-top:6px;font-size:11.5px}
+  .metric-info-box .mib-divider{border:none;border-top:1px solid #d8e8e8;margin:10px 0}
+  .metric-bracket{font-size:10px;color:#6B7280;font-weight:500;letter-spacing:.01em}
+
+  </style>
 </head>
 <body>
 <div class="app-layout">
@@ -966,7 +980,7 @@ if (window.pdfjsLib) {
       <option value="rev_desc">Sales value ↓</option>
       <option value="rev_asc">Sales value ↑</option>
       <option value="days_asc">Days cover ↑ (urgent)</option>
-      <option value="margin_desc">Margin ↓</option>
+      <option value="margin_desc">Margin (markup) ↓</option>
       <option value="name">Name A–Z</option>
     </select>
     <button class="btn" id="filtersBtn">⚙ Filters</button>
@@ -1089,7 +1103,7 @@ if (window.pdfjsLib) {
     <span class="fcustom">custom <input type="number" id="dcMinI" placeholder="min"> – <input type="number" id="dcMaxI" placeholder="max"></span>
   </div>
   <div class="frow">
-    <span class="flabel">Margin %</span>
+    <span class="flabel">Margin % <span class="metric-bracket">(markup)</span></span>
     <button class="chip fm" data-mg="m5">&lt;5%</button>
     <button class="chip fm" data-mg="m515">5–15%</button>
     <button class="chip fm" data-mg="m1530">15–30%</button>
@@ -1153,7 +1167,7 @@ if (window.pdfjsLib) {
           <th class="num sortable" data-col="velMonth" title="Average units sold per month (last 3 months)" style="min-width:55px">Vel/mo <span class="sort-arrow" id="sa-velMonth"></span><button class="col-filter-btn" data-colf="velMonth" id="cf-velMonth" title="Filter by velocity"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18l-7 8v6l-4 2v-8z"/></svg></button></th>
           <th class="num" title="Estimated monthly revenue (velocity × price)" style="min-width:70px">Rev/mo <button class="col-filter-btn" data-colf="revMonth" id="cf-revMonth" title="Filter by monthly revenue"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18l-7 8v6l-4 2v-8z"/></svg></button></th>
           <th class="num sortable" data-col="price" title="Sort by unit selling price" style="min-width:55px">Price AED <span class="sort-arrow" id="sa-price"></span><button class="col-filter-btn" data-colf="price" id="cf-price" title="Filter by price"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18l-7 8v6l-4 2v-8z"/></svg></button></th>
-          <th class="num sortable" data-col="margin" title="Sort by gross margin % · Red &lt;20% · Amber &lt;35% · Green &gt;35%" style="width:60px">Margin% <span class="sort-arrow" id="sa-margin"></span><button class="col-filter-btn" data-colf="margin" id="cf-margin" title="Filter by margin"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18l-7 8v6l-4 2v-8z"/></svg></button></th>
+          <th class="num sortable" data-col="margin" title="Markup on cost — how much you added on top of what you paid. Red &lt;20% · Amber &lt;35% · Green &gt;35%" style="width:72px">Margin% <span class="metric-bracket">(markup)</span> <span class="sort-arrow" id="sa-margin"></span><button class="col-filter-btn" data-colf="margin" id="cf-margin" title="Filter by margin"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18l-7 8v6l-4 2v-8z"/></svg></button></th>
           <th title="Primary supplier" style="min-width:90px">Supplier <button class="col-filter-btn" data-colf="supplier" id="cf-supplier" title="Filter by supplier"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18l-7 8v6l-4 2v-8z"/></svg></button></th>
           <th class="sortable" data-col="action" title="Sort by action taken" style="min-width:110px">Action <span class="sort-arrow" id="sa-action"></span><button class="col-filter-btn" data-colf="action" id="cf-action" title="Filter by action"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18l-7 8v6l-4 2v-8z"/></svg></button></th>
           <th></th>
@@ -1332,6 +1346,7 @@ Hi please check Candivast 150mg availability"
       border-radius:8px;padding:10px 28px;font-size:1em;font-weight:bold;cursor:pointer">
       ⬇ Export to Excel (5 sheets)
     </button>
+    <button id="siQuotationBtn" onclick="siGenerateQuotation()" style="background:#0D3B66;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:1em;font-weight:bold;cursor:pointer;margin-left:4px">📋 Generate Quotation</button>
     <span id="siMatchSummary" style="color:#1B5E20;font-weight:bold"></span>
     <span id="siVisibleCount" style="color:#555;font-size:0.9em;margin-left:4px"></span>
   </div>
@@ -1566,9 +1581,10 @@ Hi please check Candivast 150mg availability"
       <dt>Suggested reorder</dt><dd>The recommended quantity to order. Calculated from sales speed × (delivery time + target coverage days) + safety buffer − current stock.</dd>
       <dt>ABC Classification (Priority / Standard / Low)</dt><dd><b>Priority (A)</b> = Top medicines generating 80% of your revenue. Never let these run out. <b>Standard (B)</b> = Mid-range, 15% of revenue. <b>Low (C)</b> = Bottom 5% of revenue — consider if you need to keep stocking them.</dd>
       <dt>XYZ Classification (Stable / Variable / Erratic)</dt><dd><b>Stable (X)</b> = Demand is predictable month to month. Easy to order. <b>Variable (Y)</b> = Demand changes but has some pattern. Keep extra stock. <b>Erratic (Z)</b> = Demand is unpredictable. Hardest to manage.</dd>
-      <dt>Margin %</dt><dd>Your profit percentage. "8.7%" means for every AED 100 of sales, you keep AED 8.70 as profit.</dd>
+      <dt>Margin % (= Markup on cost)</dt><dd>How much you added on top of your purchase cost. Formula: (Selling Price ÷ Cost − 1) × 100. Example: cost AED 80, sell AED 100 → 25% markup. This is the formula your purchasing team uses when they say "margin."</dd>
       <dt>Effective cost</dt><dd>The real price you pay after accounting for bonuses. If you buy 10 and get 1 free, the effective cost per unit is lower than the invoice price.</dd>
-      <dt>Bonus margin</dt><dd>Your profit margin when calculated using the effective cost (after bonus), which is more accurate than using the invoice price.</dd>
+      <dt>Gross Margin % (shown as "Bonus Margin" in supplier table)</dt><dd>What share of each dirham of revenue is profit, using the bonus-adjusted effective cost. Formula: (Price − Effective Cost) ÷ Price × 100. Example: eff. cost AED 80, sell AED 100 → 20%. More accurate than raw invoice price because it accounts for free units.</dd>
+      <dt>Bonus % (shown as "Margin on purchase")</dt><dd>Free units received as a percentage of paid units. Formula: Bonus Qty ÷ Actual Qty × 100. Example: buy 10, get 2 free → 20%. Useful for comparing supplier bonus deals.</dd>
       <dt>Fill rate</dt><dd>The percentage of your medicines that are in stock. 75% fill rate means 75% of items are available for customers.</dd>
       <dt>EBP (Essential Benefits Package)</dt><dd>Medicines covered by UAE health insurance. These typically have higher demand because patients get them covered by their insurance plan.</dd>
       <dt>DDC (Dubai Drug Code)</dt><dd>A unique registration code assigned to every medicine approved for sale in Dubai. Used for regulatory tracking.</dd>
@@ -1611,6 +1627,94 @@ const DDC_BY_NAME = {};
     if (k && !DDC_BY_NAME[k]) DDC_BY_NAME[k] = d;
   });
 })();
+
+
+/* ---- Alternative-finder: runtime indices for medicines without sciCode ---- */
+var MOL_TO_MEDS = {};    // molecule name → [medicine keys ("b"+id)]
+var DDC_BRAND_IDX = {};  // uppercase brand word → [{ref, mols}]
+var BRAND_COUNT = {};    // brand word → count in BASE_DATA (for filtering umbrella brands)
+
+(function buildAltIndices() {
+  function extractMols(salt) {
+    if (!salt) return [];
+    var parts = salt.match(/\(([^:)]+)\s*:/g);
+    if (!parts) return [];
+    return parts.map(function(p) { return p.replace(/^\(/, '').replace(/\s*:$/, '').trim().toUpperCase(); });
+  }
+
+  // Build molecule→medicines from BASE_DATA
+  BASE_DATA.forEach(function(d) {
+    if (!d.salt) return;
+    var medKey = "b" + d.id;
+    extractMols(d.salt).forEach(function(mol) {
+      if (!MOL_TO_MEDS[mol]) MOL_TO_MEDS[mol] = [];
+      MOL_TO_MEDS[mol].push(medKey);
+    });
+  });
+
+  // Count how many products each brand has in BASE_DATA
+  BASE_DATA.forEach(function(d) {
+    var brand = (d.name || '').toUpperCase().replace(/[^A-Z ]/g, ' ').trim().split(/\s+/)[0];
+    if (brand && brand.length >= 3) BRAND_COUNT[brand] = (BRAND_COUNT[brand] || 0) + 1;
+  });
+
+  // Build brand→DDC_REF index
+  DDC_REF.forEach(function(d) {
+    if (!d.sci || !d.name) return;
+    var brand = d.name.toUpperCase().replace(/[^A-Z ]/g, ' ').trim().split(/\s+/)[0];
+    if (!brand || brand.length < 3) return;
+    if (!DDC_BRAND_IDX[brand]) DDC_BRAND_IDX[brand] = [];
+    DDC_BRAND_IDX[brand].push({ ref: d, mols: extractMols(d.salt) });
+  });
+})();
+
+/* Find alternatives via DDC_REF brand-word matching.
+   Guards: brand word must be ≥5 chars, DDC_REF must have ≤10 entries for that brand,
+   and molecule must have ≥2 medicines in BASE_DATA to be a useful alternative set. */
+function ddcBrandAlternatives(medName, excludeKey) {
+  if (!medName) return [];
+  var brand = medName.toUpperCase().replace(/[^A-Z ]/g, ' ').trim().split(/\s+/)[0];
+  if (!brand || brand.length < 5) return [];
+
+  var candidates = DDC_BRAND_IDX[brand];
+  if (!candidates || candidates.length === 0 || candidates.length > 10) return [];
+
+  // Try SALT_INDEX first
+  var sciCodes = {};
+  candidates.forEach(function(c) { if (c.ref.sci) sciCodes[c.ref.sci] = true; });
+  for (var sci in sciCodes) {
+    if (SALT_INDEX[sci]) {
+      var alts = SALT_INDEX[sci].filter(function(a) { return a.key !== excludeKey; });
+      if (alts.length > 0) return alts;
+    }
+  }
+
+  // Molecule consensus fallback
+  var molCounts = {};
+  candidates.forEach(function(c) {
+    if (c.mols.length > 0) {
+      var primary = c.mols[0];
+      molCounts[primary] = (molCounts[primary] || 0) + 1;
+    }
+  });
+  var bestMol = null, bestCount = 0;
+  for (var mol in molCounts) {
+    if (molCounts[mol] > bestCount) { bestCount = molCounts[mol]; bestMol = mol; }
+  }
+
+  if (bestMol && MOL_TO_MEDS[bestMol] && MOL_TO_MEDS[bestMol].length >= 2) {
+    var seen = {}, results = [];
+    MOL_TO_MEDS[bestMol].forEach(function(k) {
+      if (k === excludeKey || seen[k]) return;
+      seen[k] = true;
+      var med = BASE_DATA.find(function(d) { return ("b" + d.id) === k; });
+      if (med) results.push({ name: med.name, key: k, ddc: med.ddc || '', stock: med.stock || 0 });
+    });
+    if (results.length > 0) return results.slice(0, 15);
+  }
+
+  return [];
+}
 
 const WINTER_MOLECULES = [
   'CETIRIZINE','LORATADINE','FEXOFENADINE','CHLORPHENIRAMINE',
@@ -1802,6 +1906,15 @@ function marginPctOf(m){
   // Sanity cap: margins above 1000% indicate corrupt data
   if(margin>1000) return null;
   return margin;
+}
+
+/* ---- metric info toggle helper ---- */
+function toggleMetricInfo(id){
+  var el=document.getElementById(id);
+  if(!el) return;
+  // close any other open boxes first
+  document.querySelectorAll('.metric-info-box.show').forEach(function(b){ if(b.id!==id) b.classList.remove('show'); });
+  el.classList.toggle('show');
 }
 function bonusOf(m){ return fld(m,"bonus"); }
 /* the price-list "Bonus" column is free-text supplier terms and is purely cosmetic —
@@ -2715,7 +2828,7 @@ function renderDeadstockTab() {
   html += '<th class="num" style="cursor:pointer" onclick="var f=window._dsFilter;if(f.sort===\'price\')f.dir*=-1;else{f.sort=\'price\';f.dir=-1;}renderDeadstockTab()">Price <span style="font-size:10px;color:'+(df.sort==='price'?'#0c7c7c':'#9CA3AF')+'">'+(df.sort==='price'?(df.dir>0?'↑':'↓'):'⇅')+'</span></th>';
   html += '<th>Bonus</th>';
   html += '<th class="num" style="cursor:pointer" onclick="var f=window._dsFilter;if(f.sort===\'days\')f.dir*=-1;else{f.sort=\'days\';f.dir=-1;}renderDeadstockTab()">Days cover <span style="font-size:10px;color:'+(df.sort==='days'?'#0c7c7c':'#9CA3AF')+'">'+(df.sort==='days'?(df.dir>0?'↑':'↓'):'⇅')+'</span></th>';
-  html += '<th class="num" style="cursor:pointer" onclick="var f=window._dsFilter;if(f.sort===\'margin\')f.dir*=-1;else{f.sort=\'margin\';f.dir=-1;}renderDeadstockTab()">Margin % <span style="font-size:10px;color:'+(df.sort==='margin'?'#0c7c7c':'#9CA3AF')+'">'+(df.sort==='margin'?(df.dir>0?'↑':'↓'):'⇅')+'</span></th>';
+  html += '<th class="num" style="cursor:pointer" onclick="var f=window._dsFilter;if(f.sort===\'margin\')f.dir*=-1;else{f.sort=\'margin\';f.dir=-1;}renderDeadstockTab()">Margin % <span class="metric-bracket">(markup)</span> <span style="font-size:10px;color:'+(df.sort==='margin'?'#0c7c7c':'#9CA3AF')+'">'+(df.sort==='margin'?(df.dir>0?'↑':'↓'):'⇅')+'</span></th>';
   html += '<th>Action taken</th>';
   html += '<th></th>';
   html += '</tr></thead>';
@@ -3197,7 +3310,7 @@ function openColFilter(col, anchorEl){
   _cfdCol = col;
   const drop = document.getElementById("colFilterDrop");
   const body = document.getElementById("cfdBody");
-  document.getElementById("cfdTitle").textContent = {status:"Stock status",stock:"Current stock",price:"Price",daysCover:"Days cover",margin:"Margin %",action:"Action taken",velMonth:"Velocity (Units/mo)",revMonth:"Revenue/mo (AED)",supplier:"Supplier",name:"Medicine Name"}[col]||col;
+  document.getElementById("cfdTitle").textContent = {status:"Stock status",stock:"Current stock",price:"Price",daysCover:"Days cover",margin:"Margin % (markup)",action:"Action taken",velMonth:"Velocity (Units/mo)",revMonth:"Revenue/mo (AED)",supplier:"Supplier",name:"Medicine Name"}[col]||col;
   // position near the anchor
   const rect = anchorEl.getBoundingClientRect();
   drop.style.top = (rect.bottom + 4) + "px";
@@ -3219,7 +3332,7 @@ function openColFilter(col, anchorEl){
   } else if(col==="margin"){
     // reuses the same mgMin/mgMax used by the ⚙ Filters panel — one filter state, not a duplicate
     body.innerHTML=`<div class="cfrange"><span>Min</span><input type="number" id="cfd-mgmin" value="${mgMin}" placeholder="0"><span>–</span><span>Max</span><input type="number" id="cfd-mgmax" value="${mgMax}" placeholder="any"></div>
-      <div class="cm-calc-note" style="margin-top:8px">Same filter as the ⚙ Filters panel's "Margin %" range.</div>`;
+      <div class="cm-calc-note" style="margin-top:8px">Same filter as the ⚙ Filters panel's "Margin % (markup)" range.</div>`;
   } else if(col==="action"){
     const allActs=[...new Set(meds.map(m=>remarkOf(m)).filter(Boolean))].sort();
     const cur=colFilters.actions;
@@ -4975,6 +5088,12 @@ function actionGroups(){
   return {groups, total:uni.length};
 }
 function renderByAction(){
+  // Reset visibility — actionDrill hides board/groups and shows tableCard;
+  // returning to the board view needs these restored
+  document.getElementById("board").style.display = "";
+  document.getElementById("groups").style.display = "";
+  document.getElementById("tableCard").style.display = "none";
+
   const {groups,total}=actionGroups();
   document.getElementById("metaTab").textContent="By action";
   document.getElementById("metaCount").textContent = total? `${total.toLocaleString()} actionable medicine${total>1?'s':''}` : "No actionable medicines";
@@ -4993,7 +5112,18 @@ function renderByAction(){
       <div class="track"><div class="fill" style="width:${pct}%"></div></div></button>`;
   }).join("");
   board.innerHTML=cards;
-  board.querySelectorAll(".acard").forEach(c=> c.onclick=()=>{ boardSel = (boardSel===c.dataset.b?"":c.dataset.b); render(); });
+  board.querySelectorAll(".acard").forEach(c=> c.onclick=()=>{
+    const key = c.dataset.b;
+    const label = c.querySelector(".l") ? c.querySelector(".l").textContent : key;
+    if(key === "") {
+      // "All actionable" — reset to board view
+      boardSel = "";
+      render();
+    } else {
+      // Drill into specific action
+      actionDrill(key, label);
+    }
+  });
 
   // groups
   const shown = boardSel ? groups.filter(g=>g.key===boardSel) : groups;
@@ -5390,7 +5520,7 @@ function downloadSupplierList(sk, customList, label){
   const list = customList || meds.filter(m=>suppliersOf(m).some(q=>supplierKey(q.supplier)===sk));
   if(!list.length){ toast("No medicines to download"); return; }
   try{
-    const header=["Medicine","Stock Status","Current Stock","Selling Price","Cost","Bonus","Bonus %","Eff. Cost","Bonus Margin",
+    const header=["Medicine","Stock Status","Current Stock","Selling Price","Cost","Bonus","Bonus %","Eff. Cost","Gross Margin %",
       "Velocity Tier","Trend %","Days Cover","Action Taken","Expiry"];
     const rows=list.map(m=>{
       const q=suppliersOf(m).find(q=>supplierKey(q.supplier)===sk);
@@ -5770,6 +5900,66 @@ function _dimPills(dim,uni){
   return h+'</div>';
 }
 
+var _mfrSelectedKeys = new Set();
+
+function _mfrExportExcel(list, label){
+  try{
+    if(!list||!list.length){ toast("Nothing to download"); return; }
+    var header=["Medicine","Status","Stock","Days Cover","Price AED","Margin%","Top Supplier","Action","Salt","Manufacturer","DDC","Expiry","Formulary","Dispense Mode"];
+    var rows=list.map(function(m){
+      var sup=suppliersOf(m)[0];
+      return [m.name||"",statusOf(m)||"",stockOf(m)||0,daysCoverDynamic(m)||"",priceOf(m)||"",marginPctOf(m)||"",
+        sup?sup.supplier:"",remarkOf(m)||"",m.salt||"",m.manufacturer||"",m.ddc||"",expiryOf(m)||"",
+        ((m.thiqaFormulary||"").trim()?"Thiqa ":"")+((m.basicFormulary||"").trim()?"Basic":"") || "",
+        m.dispenseMode||""];
+    });
+    var ts=new Date().toISOString().slice(0,10);
+    var title=["Vitals Supply Chain \u2014 "+label+" \u2014 "+list.length+" medicines \u2014 "+ts];
+    var aoa=[title,[],header].concat(rows);
+    var ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"]=[{wch:36},{wch:14},{wch:10},{wch:10},{wch:10},{wch:10},{wch:28},{wch:22},{wch:28},{wch:28},{wch:18},{wch:14},{wch:14},{wch:14}];
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,"Supply Chain");
+    ["OUT OF STOCK","LOW STOCK","ADEQUATE"].forEach(function(st){
+      var sub=list.filter(function(m){return statusOf(m)===st;});
+      if(!sub.length)return;
+      var sws=XLSX.utils.aoa_to_sheet([header].concat(sub.map(function(m){
+        var sup2=suppliersOf(m)[0];
+        return [m.name||"",statusOf(m)||"",stockOf(m)||0,daysCoverDynamic(m)||"",priceOf(m)||"",marginPctOf(m)||"",
+          sup2?sup2.supplier:"",remarkOf(m)||"",m.salt||"",m.manufacturer||"",m.ddc||"",expiryOf(m)||"",
+          ((m.thiqaFormulary||"").trim()?"Thiqa ":"")+((m.basicFormulary||"").trim()?"Basic":"") || "",
+          m.dispenseMode||""];
+      })));
+      sws["!cols"]=[{wch:36},{wch:14},{wch:10},{wch:10},{wch:10},{wch:10},{wch:28},{wch:22},{wch:28},{wch:28},{wch:18},{wch:14},{wch:14},{wch:14}];
+      XLSX.utils.book_append_sheet(wb,sws,safeSheet(st.split(" ").map(function(w){return w[0]+w.slice(1).toLowerCase();}).join(" ")));
+    });
+    XLSX.writeFile(wb,"Vitals_SupplyChain_"+label.replace(/[^a-zA-Z0-9]/g,"_").slice(0,30)+"_"+ts+".xlsx");
+    toast("Downloaded "+list.length+" medicines");
+  }catch(err){ toast("Download error: "+err.message); console.error(err); }
+}
+
+function _mfrExportDDC(list, label){
+  try{
+    if(!list||!list.length){ toast("Nothing to download"); return; }
+    var header=["DDC Code","Trade Name","Salt/INN","Form","DDC Price AED","Status"];
+    var rows=list.map(function(d){return [d.code||"",d.trade||"",d.salt||"",d.form||"",d.price||"",d.status||""];});
+    var ts=new Date().toISOString().slice(0,10);
+    var ws=XLSX.utils.aoa_to_sheet([["Vitals \u2014 Not Stocked \u2014 "+label+" \u2014 "+list.length+" items \u2014 "+ts],[],header].concat(rows));
+    ws["!cols"]=[{wch:18},{wch:36},{wch:28},{wch:16},{wch:12},{wch:14}];
+    var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Not Stocked");
+    XLSX.writeFile(wb,"Vitals_NotStocked_"+label.replace(/[^a-zA-Z0-9]/g,"_").slice(0,30)+"_"+ts+".xlsx");
+    toast("Downloaded "+list.length+" items");
+  }catch(err){ toast("Download error: "+err.message); console.error(err); }
+}
+
+function _mfrRenderSelBar(){
+  var bar=document.getElementById("mfrBulkBar"); if(!bar) return;
+  var n=_mfrSelectedKeys.size;
+  if(!n){ bar.style.display="none"; return; }
+  bar.style.display="flex";
+  document.getElementById("mfrBulkCount").textContent=n+" selected";
+}
+
 function renderByManufacturer(){
   var dim=_mfrDimension||"manufacturer",cfg=_dimCfg[dim],ddcField=cfg.ddcField;
   var ddcList=state.ddcList||[],hasDdc=ddcList.length>0;
@@ -5863,14 +6053,21 @@ function renderByManufacturer(){
   var html=_dimPills(dim,uni);
   html+='<div class="group">'+
     '<div class="group-hd" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
-      '<button class="btn" onclick="mfrSel=\'\';page=1;render()">← All '+cfg.label.toLowerCase()+'s</button>'+
+      '<button class="btn" onclick="_mfrSelectedKeys.clear();mfrSel=\'\';page=1;render()">← All '+cfg.label.toLowerCase()+'s</button>'+
       '<span style="font-size:15px;font-weight:700">'+cfg.icon+' '+esc(_mfrKey)+'</span>'+
       (pct!==null?'<span style="font-size:12px;color:var(--muted)">'+pct+'% of DDC portfolio stocked</span>':'')+
+      '<button onclick="_mfrExportExcel(window._mfrCtx.sList,window._mfrCtx.mfrKey)" style="margin-left:auto;padding:6px 14px;background:#0c7c7c;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">\u2B07 Download ('+sList.length+')</button>'+
+    '</div>'+
+    '<div id="mfrBulkBar" style="display:'+(_mfrSelectedKeys.size?'flex':'none')+';align-items:center;gap:10px;padding:8px 14px;margin-bottom:10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px">'+
+      '<span id="mfrBulkCount" style="font-size:13px;font-weight:600;color:#1D4ED8">'+_mfrSelectedKeys.size+' selected</span>'+
+      '<button onclick="var sel=window._mfrCtx.sList.filter(function(m){return _mfrSelectedKeys.has(m.key);});if(!sel.length){toast(\x27Select medicines first\x27);return;}_mfrExportExcel(sel,\x27Selected_\x27+sel.length)" style="padding:5px 12px;background:#0c7c7c;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer">\u2B07 Export Selected</button>'+
+      '<button onclick="_mfrSelectedKeys.clear();_mfrRenderSelBar();render()" style="padding:5px 12px;background:#fff;color:#6B7280;border:1px solid #E2E8F0;border-radius:6px;font-size:12px;cursor:pointer">\u2715 Clear</button>'+
     '</div>'+
     '<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:2px solid #E2E8F0;padding-bottom:0;flex-wrap:wrap">'+
       tabs.map(function(t){return '<button onclick="mfrSubTab=\''+t.id+'\';render()" style="padding:8px 16px;border:none;background:none;cursor:pointer;font-weight:600;font-size:13px;border-bottom:'+(mfrSubTab===t.id?'3px solid #0c7c7c':'3px solid transparent')+';color:'+(mfrSubTab===t.id?'#0c7c7c':'#6B7280')+';position:relative;top:2px">'+t.label+'</button>';}).join("")+
     '</div>';
 
+  window._mfrCtx={sList:sList,notStockedList:notStockedList,mfrKey:_mfrKey};
   // ── Sub-tabs (preserved from original) ──
   if(mfrSubTab==="stocked"){
     if(!sList.length){ html+='<div style="padding:40px;text-align:center;color:var(--muted)">No stocked medicines from this manufacturer</div>'; }
@@ -5967,7 +6164,7 @@ function renderByManufacturer(){
       html+=rf('Stock (units)','stockMin','stockMax','','1');
       html+=rf('Days Cover','dcMin','dcMax','d','1');
       html+=rf('Price (AED)','priceMin','priceMax','AED','0.01');
-      html+=rf('Margin %','marginMin','marginMax','%','1');
+      html+=rf('Margin % (markup)','marginMin','marginMax','%','1');
       html+='</div>';
       // Formulary & Dispense filters
       html+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;padding:8px 12px;background:#FAF5FF;border:1px solid #E9D5FF;border-radius:8px">';
@@ -5983,6 +6180,7 @@ function renderByManufacturer(){
       html+='<div style="font-size:12px;color:var(--muted);margin-bottom:6px">'+fList.length+' of '+sList.length+' medicines'+(activeFilters>0?' <span style="color:#0c7c7c;font-weight:600">(filtered)</span>':'')+'</div>';
       // Table
       html+='<div style="overflow-x:auto"><table class="tbl"><thead><tr>'+
+        '<th style="width:30px;padding:6px"><input type="checkbox" id="mfrSelectAll" title="Select all"></th>'+
         thBtn('name','Medicine','')+
         thBtn('status','Status','Filter by stock status')+
         thBtn('stock','Stock','Filter by units on hand')+
@@ -5997,6 +6195,7 @@ function renderByManufacturer(){
         const st=statusOf(m);const stColor=st==="OUT OF STOCK"?"#B71C1C":st==="LOW STOCK"?"#92400E":"#166534";
         const bestSup=suppliersOf(m)[0];const dc=daysCoverDynamic(m);
         html+='<tr onclick="openDetail(\''+esc(m.key)+'\')" style="cursor:pointer">'+
+          '<td style="width:30px;padding:6px" onclick="event.stopPropagation()"><input type="checkbox" class="mfr-row-chk" data-mfrchk="'+esc(m.key)+'" '+(_mfrSelectedKeys.has(m.key)?'checked':'')+' onchange="if(this.checked)_mfrSelectedKeys.add(this.dataset.mfrchk);else _mfrSelectedKeys.delete(this.dataset.mfrchk);_mfrRenderSelBar()"></td>'+
           '<td><b>'+esc(m.name)+'</b>'+(m.ddc?'<br><span style="font-size:10px;color:var(--muted)">'+esc(m.ddc)+'</span>':'')+'</td>'+
           '<td><span style="color:'+stColor+';font-weight:600;font-size:12px">'+st+'</span></td>'+
           '<td>'+(m.stock||0).toLocaleString()+'</td>'+
@@ -6008,13 +6207,13 @@ function renderByManufacturer(){
           '<td style="font-size:10px">'+((m.dispenseMode||'').toLowerCase().includes('prescription')?'<span style="color:#7C3AED">Rx</span>':(m.dispenseMode||'').toLowerCase().includes('otc')?'<span style="color:#059669">OTC</span>':'<span style="color:#9CA3AF">\u2014</span>')+'</td>'+
           '<td>'+actionSelect(m)+'</td></tr>';
       });
-      if(!fList.length) html+='<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted)">No results. <span onclick="'+clearAllJs+'" style="color:#0c7c7c;cursor:pointer">Clear filters</span></td></tr>';
+      if(!fList.length) html+='<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted)">No results. <span onclick="'+clearAllJs+'" style="color:#0c7c7c;cursor:pointer">Clear filters</span></td></tr>';
       html+='</tbody></table></div>';
     }
   } else if(mfrSubTab==="notstocked"){
     if(!notStockedList.length){ html+='<div style="padding:40px;text-align:center;color:var(--muted)">All DDC medicines from this manufacturer are stocked \u2713</div>'; }
     else {
-      html+='<div style="margin-bottom:12px;font-size:13px;color:var(--muted)">'+notStockedList.length+' medicines in DDC not currently stocked</div>';
+      html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="font-size:13px;color:var(--muted)">'+notStockedList.length+' medicines in DDC not currently stocked</span><button onclick="_mfrExportDDC(window._mfrCtx.notStockedList,window._mfrCtx.mfrKey)" style="margin-left:auto;padding:5px 12px;background:#0c7c7c;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">\u2B07 Download ('+notStockedList.length+')</button></div>';
       html+='<table class="tbl"><thead><tr><th>DDC Code</th><th>Trade Name</th><th>Salt / INN</th><th>Form</th><th>DDC Price AED</th><th>Status</th></tr></thead><tbody>';
       notStockedList.forEach(d=>{
         const isActive=(d.status||"").toLowerCase().startsWith("active");
@@ -6027,6 +6226,7 @@ function renderByManufacturer(){
     }
   } else if(mfrSubTab==="risk"){
     // ── Risk Analysis ──
+    html+='<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button onclick="_mfrExportExcel(window._mfrCtx.sList,\x27Risk_\x27+window._mfrCtx.mfrKey)" style="padding:5px 12px;background:#0c7c7c;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">\u2B07 Download ('+sList.length+')</button></div>';
     const riskSection = (icon,title,desc,items,cols,rowFn) => {
       if(!items.length) return '<div style="margin-bottom:20px"><div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:6px">'+icon+' '+title+'</div><div style="font-size:12px;color:var(--muted);padding:8px 0">None found ✓</div></div>';
       let s='<div style="margin-bottom:24px"><div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:4px">'+icon+' '+title+' <span style="font-size:12px;font-weight:400;color:var(--muted)">('+items.length+')</span></div>';
@@ -6126,6 +6326,7 @@ function renderByManufacturer(){
     }
 
   } else if(mfrSubTab==="orders"){
+    html+='<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button onclick="_mfrExportExcel(window._mfrCtx.sList,\x27Orders_\x27+window._mfrCtx.mfrKey)" style="padding:5px 12px;background:#0c7c7c;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">\u2B07 Download ('+sList.length+')</button></div>';
     // ── Purchase History ──
     // Gather all orders for this manufacturer's medicines
     const allOrders=[];
@@ -6260,6 +6461,7 @@ function renderByManufacturer(){
     }
 
   } else if(mfrSubTab==="suppliers"){
+    html+='<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button onclick="_mfrExportExcel(window._mfrCtx.sList,\x27Suppliers_\x27+window._mfrCtx.mfrKey)" style="padding:5px 12px;background:#0c7c7c;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">\u2B07 Download ('+sList.length+')</button></div>';
     // ── Supplier Mapping ──
     // Build supplier → medicines index with pricing data
     const supMap={};
@@ -6410,6 +6612,7 @@ function renderByManufacturer(){
     }
 
   } else if(mfrSubTab==="sales"){
+    html+='<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button onclick="_mfrExportExcel(window._mfrCtx.sList,\x27Sales_\x27+window._mfrCtx.mfrKey)" style="padding:5px 12px;background:#0c7c7c;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">\u2B07 Download ('+sList.length+')</button></div>';
     // ── Sales Performance ──
     const withSales=sList.filter(m=>Number(m.salesValue||0)>0);
     const totalRev=sList.reduce((s,m)=>s+Number(m.salesValue||0),0);
@@ -6536,6 +6739,7 @@ function renderByManufacturer(){
     }
 
   } else if(mfrSubTab==="compliance"){
+    html+='<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button onclick="_mfrExportExcel(window._mfrCtx.sList,\x27Compliance_\x27+window._mfrCtx.mfrKey)" style="padding:5px 12px;background:#0c7c7c;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">\u2B07 Download ('+sList.length+')</button></div>';
     // ── Regulatory & Compliance ──
     const today_c=new Date();
 
@@ -6723,6 +6927,7 @@ function renderByManufacturer(){
     }
 
   } else if(mfrSubTab==="margins"){
+    html+='<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button onclick="_mfrExportExcel(window._mfrCtx.sList,\x27Margins_\x27+window._mfrCtx.mfrKey)" style="padding:5px 12px;background:#0c7c7c;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">\u2B07 Download ('+sList.length+')</button></div>';
     // ── Price & Margin Analysis ──
     const allMargins=sList.map(m=>({m:m,margin:marginPctOf(m),price:priceOf(m),sales:Number(m.salesValue||0),vel:recentVelMonth(m)})).filter(r=>r.margin!=null);
     const overallAvgMargin=meds.reduce((s,m)=>{const mg=marginPctOf(m);return mg!=null?{t:s.t+mg,n:s.n+1}:s;},{t:0,n:0});
@@ -6878,6 +7083,7 @@ function renderByManufacturer(){
     }
 
   } else if(mfrSubTab==="overview"){
+    html+='<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button onclick="_mfrExportExcel(window._mfrCtx.sList,\x27Overview_\x27+window._mfrCtx.mfrKey)" style="padding:5px 12px;background:#0c7c7c;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">\u2B07 Download ('+sList.length+')</button></div>';
     // ── Manufacturer Scorecard ──
     const capTied=sList.reduce((s,m)=>s+(priceOf(m)&&stockOf(m)?priceOf(m)*stockOf(m):0),0);
     const inStock=sList.filter(m=>Number(stockOf(m))>0).length;
@@ -7066,6 +7272,12 @@ function renderByManufacturer(){
   html += '</div>';
   gc.innerHTML = html;
   wireRows();
+  var _mfrSA=document.getElementById("mfrSelectAll");
+  if(_mfrSA) _mfrSA.onchange=function(){
+    var chks=document.querySelectorAll(".mfr-row-chk");
+    chks.forEach(function(c){ if(_mfrSA.checked) _mfrSelectedKeys.add(c.dataset.mfrchk); else _mfrSelectedKeys.delete(c.dataset.mfrchk); c.checked=_mfrSA.checked; });
+    _mfrRenderSelBar();
+  };
 }
 
 
@@ -8551,7 +8763,7 @@ function exportMedicineProfile(){
     // Section 6: Supplier comparison
     const sups=suppliersOf(m);
     if(sups.length){
-      const sh=["Supplier","Cost","Bonus","Bonus %","Effective Cost","Bonus Margin","Expiry","MOQ","Last Updated"];
+      const sh=["Supplier","Cost","Bonus","Bonus %","Effective Cost","Gross Margin %","Expiry","MOQ","Last Updated"];
       const srows=sups.map(s=>{
         const bp=bonusPctOf(s); const ec=effectiveCostOf(s); const bm=bonusMarginOf(s,sp);
         return [s.supplier||"",s.price||"",s.bonus||"",bp!=null?bp+"%":"",ec!=null?ec:"",bm!=null?bm+"%":"",s.expiry||"",s.moq||"",s.updated||""];
@@ -8740,9 +8952,32 @@ function priceComplianceBadge(m){
   return `<span class="badge b-compliant" title="Selling ${sp.toFixed(2)} vs regulated ${rp.toFixed(2)}">✓ Compliant</span>`;
 }
 function saltAlternatives(m){
-  const sc=m.sciCode; if(!sc) return [];
-  const idx=SALT_INDEX[sc]||[];
-  return idx.filter(a=>a.key!==m.key);
+  // Fast path: has sciCode → SALT_INDEX
+  var sc = m.sciCode;
+  if (sc) {
+    var idx = SALT_INDEX[sc] || [];
+    return idx.filter(function(a){ return a.key !== m.key; });
+  }
+
+  // Fallback 1: DDC brand matching → SALT_INDEX or molecule consensus
+  var brandAlts = ddcBrandAlternatives(m.name, m.key);
+  if (brandAlts.length > 0) return brandAlts;
+
+  // Fallback 2: same brand-name within BASE_DATA (only for focused brands with ≤4 products)
+  var brand = (m.name || '').toUpperCase().replace(/[^A-Z ]/g, ' ').trim().split(/\s+/)[0];
+  if (brand && brand.length >= 5 && (BRAND_COUNT[brand] || 0) <= 4) {
+    var nameAlts = [];
+    for (var i = 0; i < BASE_DATA.length; i++) {
+      var d = BASE_DATA[i];
+      var dk = "b" + d.id;
+      if (dk === m.key) continue;
+      var dBrand = (d.name || '').toUpperCase().replace(/[^A-Z ]/g, ' ').trim().split(/\s+/)[0];
+      if (dBrand === brand) nameAlts.push({ name: d.name, key: dk, ddc: d.ddc || '', stock: d.stock || 0 });
+    }
+    if (nameAlts.length > 0) return nameAlts.slice(0, 15);
+  }
+
+  return [];
 }
 function exportExcel(){
   const header=["Item Name","Stock Status","Remarks","Current Stock","Selling Price","Bonus",
@@ -8775,7 +9010,7 @@ function exportExcel(){
       const bp=bonusPctOf(q); const ec=effectiveCostOf(q); const bm=bonusMarginOf(q,sp);
       qrows.push([m.name,q.supplier,q.price??"",q.bonus||"",bp!=null?bp+"%":"",ec!=null?ec:"",bm!=null?bm+"%":"",q.expiry||"",q.updated||"",q.source==="manual"?"Manual":"MRN",q.notes||""]); }); });
   if(qrows.length){
-    const qaoa=[["Medicine","Supplier","Cost","Bonus","Bonus %","Effective Cost","Bonus Margin","Expiry","Last / Updated","Source","Notes"],...qrows];
+    const qaoa=[["Medicine","Supplier","Cost","Bonus","Bonus %","Effective Cost","Gross Margin %","Expiry","Last / Updated","Source","Notes"],...qrows];
     const qws=XLSX.utils.aoa_to_sheet(qaoa);
     qws['!cols']=[{wch:36},{wch:26},{wch:10},{wch:14},{wch:10},{wch:12},{wch:12},{wch:14},{wch:14},{wch:8},{wch:22}];
     XLSX.utils.book_append_sheet(wb,qws,"Supplier Comparison");
@@ -9315,7 +9550,7 @@ function openDetail(key){
     `<span><span class="k">Stock</span> <b>${fmtNum(stockOf(m))}</b></span>`+
     `<span><span class="k">Days cover</span> <b>${fmtNum(daysCoverDynamic(m))}</b></span>`+
     `<span><span class="k">Selling price</span> <b>${sp!=null&&sp!==""&&!isNaN(Number(sp))?Number(sp).toFixed(2):'–'}</b></span>`+
-    `<span><span class="k">Margin</span> <b>${(()=>{const mg=marginPctOf(m);return mg!=null?fmtNum(mg)+'%':'–';})()}</b></span>`+
+    `<span><span class="k">Margin <span class="metric-bracket">(markup)</span></span> <b>${(()=>{const mg=marginPctOf(m);return mg!=null?fmtNum(mg)+'%':'–';})()}</b></span>`+
     `<span title="${esc(revenueCalcTip(m))}"><span class="k">${esc(revenuePeriodLabel(m))}</span> <b>${fmtAED(m._rev)}${m._high?' ★':''}</b></span>`+
     `<span><span class="k">Action</span> <b>${remarkOf(m)?esc(remarkOf(m)):'–'}</b>${orderTrackingBadge(m)}</span>`+
     (m.ddc?`<span><span class="k">DDC</span> <b>${esc(m.ddc)}</b></span>`:'')+
@@ -9378,7 +9613,23 @@ function renderCostMarginSection(m){
   const c=landedCostOf(m);
   const sp=Number(priceOf(m))||0;
   if(c.cost==null && !sp) return "";
-  let html=`<div class="qsec">💰 Cost &amp; Margin</div><div class="cm-grid">`;
+  let html=`<div class="qsec">💰 Cost &amp; Margin <button class="metric-info-btn" onclick="toggleMetricInfo('mib-master')" title="What do these numbers mean?">?</button></div>
+<div id="mib-master" class="metric-info-box">
+  <div class="mib-title">📖 Understanding the three margin-related numbers</div>
+  <b>① Margin % (= Markup on cost)</b> — How much you added on top of what you paid. Shown in the main table and filters.<br>
+  <div class="mib-formula">(Selling Price ÷ Cost − 1) × 100</div>
+  <div class="mib-example">Cost AED 80, sell AED 100 → (100 ÷ 80 − 1) × 100 = <b>25%</b></div>
+  <hr class="mib-divider">
+  <b>② Gross Margin % (in supplier table)</b> — What share of your revenue is profit. Uses bonus-adjusted cost.<br>
+  <div class="mib-formula">(Selling Price − Effective Cost) ÷ Selling Price × 100</div>
+  <div class="mib-example">Eff. cost AED 80, sell AED 100 → (100 − 80) ÷ 100 × 100 = <b>20%</b></div>
+  <hr class="mib-divider">
+  <b>③ Bonus % (= Margin on purchase)</b> — Free units as a percentage of paid units.<br>
+  <div class="mib-formula">Bonus Qty ÷ Actual Qty × 100</div>
+  <div class="mib-example">Buy 10, get 2 free → 2 ÷ 10 × 100 = <b>20%</b></div>
+  <hr class="mib-divider">
+  <div class="mib-use">These three numbers measure different things — they are not meant to match each other.</div>
+</div><div class="cm-grid">`;
   if(c.cost!=null){
     html+=`<div class="cm-card" title="${esc(costValTip(m))}"><div class="cm-k">Cost of Goods (per unit)</div><div class="cm-v">AED ${c.cost.toFixed(2)}</div>
       ${c.source==="last purchase"?`<div class="cm-sub">from ${c.bonusQty>0?`${c.actualQty.toLocaleString()} + ${c.bonusQty.toLocaleString()} bonus`:c.actualQty.toLocaleString()}${c.n?` · MRN ${esc(c.n)}`:''}, ${c.date}${c.landedPct?` + ${c.landedPct}% landed cost`:''}</div>`:c.source==="supplier quote"?`<div class="cm-sub">from supplier quote, no purchase history yet${c.landedPct?` + ${c.landedPct}% landed cost`:''}</div>`:''}
@@ -9389,9 +9640,19 @@ function renderCostMarginSection(m){
   var dsBq=dsLatest?Number(dsLatest.bonusQty||dsLatest.bq)||0:0;
   var marginPct=(dsLatest&&dsAq>0&&dsBq>0)?Math.round((dsBq/dsAq)*100*10)/10:null;
   if(marginPct!==null){
-    html+=`<div class="cm-card good" title="Margin = (Bonus Qty ÷ Actual Qty) × 100\n(${dsBq.toLocaleString()} ÷ ${dsAq.toLocaleString()} × 100) = ${marginPct}%\nThis is the bonus percentage you receive from the supplier."><div class="cm-k">Margin (bonus on purchase)</div><div class="cm-v">${marginPct}%</div></div>`;
+    html+=`<div class="cm-card good" title="Bonus % = (Bonus Qty ÷ Actual Qty) × 100\n(${dsBq.toLocaleString()} ÷ ${dsAq.toLocaleString()} × 100) = ${marginPct}%\nThis is the bonus percentage you receive from the supplier."><div class="cm-k">Margin (bonus on purchase) <span class="metric-bracket">(= Bonus %)</span> <button class="metric-info-btn" onclick="toggleMetricInfo('mib-bonus')" title="What is this?">?</button></div><div class="cm-v">${marginPct}%</div></div>`;
   }
   html+=`</div>`;
+  // Bonus % info box
+  html+=`<div id="mib-bonus" class="metric-info-box">
+    <div class="mib-title">📖 What is "Margin (bonus on purchase)"?</div>
+    This is actually a <b>Bonus %</b> — how many free units the supplier gave you, as a percentage of what you paid for.<br>
+    <div class="mib-formula">Bonus % = (Free Units ÷ Paid Units) × 100</div>
+    <div class="mib-example">You order 100 units and get 20 free → 20 ÷ 100 × 100 = <b>20%</b></div>
+    <hr class="mib-divider">
+    <div class="mib-use">Use this to compare supplier deals — higher bonus % = better deal at the same price.</div>
+    <div style="margin-top:6px;font-size:11px;color:#6B7280">⚠ This is <b>not</b> the same as the "Margin %" shown in the table columns (that one is markup on cost).</div>
+  </div>`;
   // interactive calculator
   const defAq=1, defBq=0;
   html+=`<div class="cm-calc">
@@ -9404,9 +9665,9 @@ function renderCostMarginSection(m){
     </div>
     <div class="cm-calc-grid" style="margin-top:10px">
       <div><label>Total Qty</label><div class="cm-calc-out" id="cmTotalQty">–</div></div>
-      <div><label>Selling Margin %</label><div class="cm-calc-out" id="cmSellMargin">–</div></div>
+      <div><label>Selling Margin % <span class="metric-bracket">(markup on cost)</span></label><div class="cm-calc-out" id="cmSellMargin">–</div></div>
       <div><label>Given to Customer %</label><input type="number" id="cmDiscount" step="0.1" value="0"></div>
-      <div><label>Net Margin Left %</label><div class="cm-calc-out good" id="cmNetMargin">–</div></div>
+      <div><label>Net Margin Left % <span class="metric-bracket">(after discount)</span></label><div class="cm-calc-out good" id="cmNetMargin">–</div></div>
     </div>
     <div class="cm-calc-summary" id="cmSummary"></div>
     <div class="cm-calc-note">Cost defaults to this item's Cost of Goods per unit from the purchase register (same basis as Margin above) — override it to test a different purchase price.</div>
@@ -9476,7 +9737,8 @@ function renderDrugInfo(){
   // salt alternatives
   const alts=saltAlternatives(m);
   if(alts.length){
-    html+=`<div class="qsec">Same salt alternatives <span class="qsub">${alts.length} other medicine${alts.length>1?'s':''} with same active ingredient</span></div>`;
+    var altSource = m.sciCode ? 'same active ingredient' : 'similar active ingredient (auto-matched)';
+    html+=`<div class="qsec">Salt / Therapeutic Alternatives <span class="qsub">${alts.length} other medicine${alts.length>1?'s':''} with ${altSource}</span></div>`;
     html+=`<div class="salt-alts">`;
     alts.forEach(a=>{
       const am=meds.find(x=>x.key===a.key);
@@ -10629,6 +10891,67 @@ function dashDrill(label, filterFn){
   renderDrillList();
 }
 function setAbcDrillTab(tab){ _abcDrillTab=tab; renderDrillList(); }
+
+function actionDrill(actionKey, actionLabel){
+  // Drill into an action card — show filtered medicines in the table, like dashDrill
+  boardSel = actionKey;
+  const {groups, total} = actionGroups();
+  const grp = actionKey ? groups.find(g=>g.key===actionKey) : null;
+  const list = grp ? grp.list : groups.flatMap(g=>g.list);
+  const label = actionKey ? actionLabel : "All actionable";
+  const count = list.length;
+
+  // Hide board + groups, show table
+  document.getElementById("board").style.display = "none";
+  document.getElementById("groups").style.display = "none";
+  document.getElementById("tableCard").style.display = "";
+  const tbar = document.getElementById("toolbar2"); if(tbar) tbar.style.display = "";
+  document.getElementById("actionFilter").style.display = "";
+  document.getElementById("supplierFilter").style.display = "";
+
+  // Apply additional filters on top
+  let filtered = list.slice();
+  if(searchTerm) filtered = filtered.filter(m=> siMultiSearch(m, searchTerm));
+  if(supplierSel) filtered = filtered.filter(m=> suppliersOf(m).some(q=>supplierKey(q.supplier)===supplierSel));
+  filtered = applySort(applyColFilters(metricFilter(highFilter(filtered))));
+
+  const totalRev = list.reduce((s,m)=>s+(m._rev||0),0);
+  const filteredRev = filtered.reduce((s,m)=>s+(m._rev||0),0);
+  const extraFilters = (searchTerm||supplierSel||highOnly) ? " (filtered)" : "";
+  const revNote = extraFilters ? fmtAED(filteredRev)+' of '+fmtAED(totalRev)+' total' : fmtAED(filteredRev);
+
+  // Breadcrumb
+  const ptb = document.getElementById("pageTitleBar");
+  if(ptb) ptb.innerHTML = '<div class="ptb">' +
+    '<span class="breadcrumb"><a class="bc-link" onclick="boardSel=\'\';searchTerm=\'\';supplierSel=\'\';page=1;render()">⚡ By action</a> › </span>' +
+    '<span class="ptb-title">' + esc(label) + extraFilters + '</span>' +
+    '<span class="ptb-cnt">' + filtered.length + ' medicines · ' + revNote + '</span>' +
+    '<span style="flex:1"></span>' +
+    '<button class="btn action-dl-btn" onclick="actionDrillDownload()" style="font-size:12px;padding:6px 14px">↓ Download (' + filtered.length + ')</button>' +
+    '</div>';
+
+  // Render table
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if(page > pages) page = pages;
+  const slice = filtered.slice((page-1)*PAGE_SIZE, (page-1)*PAGE_SIZE + PAGE_SIZE);
+  const tb = document.getElementById("rows"); if(!tb) return;
+  tb.innerHTML = slice.map(rowHTML).join("");
+  document.getElementById("metaCount").textContent = filtered.length + ' medicines';
+  document.getElementById("metaTab").textContent = label;
+  renderPager(filtered.length, pages);
+  wireRows();
+
+  // Store drill list for download
+  window._actionDrillList = filtered;
+  window._actionDrillLabel = label;
+}
+
+function actionDrillDownload(){
+  const list = window._actionDrillList;
+  const label = window._actionDrillLabel || "Action";
+  if(!list || !list.length){ toast("Nothing to download"); return; }
+  downloadActionList(list, label, false);
+}
 
 function renderDrillList(){
   if(!drillFilter) return;
@@ -13962,7 +14285,7 @@ const PA_APPROVERS = {finance:"Finance", md:"MD", gm:"GM"};
 function paPendingCount(){ return (state.purchaseRequests||[]).filter(r=>r.stage==="pending_approval").length; }
 function paList(){ return state.purchaseRequests||[]; }
 function paFind(id){ return paList().find(r=>r.id===id); }
-function paGenId(){ const n=state.paSeq||1; state.paSeq=n+1; scheduleSave(); return "PA-"+String(n).padStart(4,"0"); }
+function paGenId(){ const n=state.paSeq||1; state.paSeq=n+1; /* paAutoApprove & paPoSeq initialized in state */ scheduleSave(); return "PA-"+String(n).padStart(4,"0"); }
 function paNow(){ return new Date().toISOString(); }
 function paHist(req, action, note){ req.history=req.history||[]; req.history.push({at:paNow(), by:state.currentUser||"User", action, note:note||""}); }
 function paTier(value){
@@ -14044,6 +14367,8 @@ function paSubmitNewRequest(){
   const ov=document.getElementById('paNewScrim'); if(ov) ov.remove();
   render();
   paOpenDetail(req.id);
+  // Auto-notify purchase dept via WhatsApp if enabled
+  if(state.paAutoNotifyNew && paPurchaseDeptPhone()){ paNotifyPurchaseDept(req.id); }
 }
 function paMoveStage(id, stage, note){
   const req=paFind(id); if(!req) return;
@@ -14060,6 +14385,8 @@ function paToPendingApproval(id){
   if(!v||!Number(v.unitPrice)){ toast("Select a vendor with a unit price first"); return; }
   req.approvals={finance:{status:"pending"},md:{status:"pending"},gm:{status:"pending"}};
   paMoveStage(id,"pending_approval", `Vendor: ${v.name||'(unnamed)'} · Est. value AED ${paEstValue(req).toLocaleString()}`);
+  // Auto-notify approvers via WhatsApp if enabled
+  if(state.paAutoNotifyApproval){ setTimeout(function(){ paNotifyApprovers(id); },300); }
 }
 function paAddVendor(id){
   const req=paFind(id); if(!req) return;
@@ -14085,7 +14412,13 @@ function paRemoveVendor(id, idx){
   req.updatedAt=paNow(); scheduleSave(); paOpenDetail(id);
 }
 function paApprove(id, key){
-  const req=paFind(id); if(!req) return;
+  var req=paFind(id); if(!req) return;
+  // Phase 6: budget gate warning
+  var bw=paBudgetWarning(paEstValue(req));
+  if(bw && !req._budgetAcked){
+    if(!confirm(bw+"\n\nProceed with approval?")){return;}
+    req._budgetAcked=true;
+  }
   req.approvals=req.approvals||{}; req.approvals[key]={status:"approved", by:state.currentUser||key, at:paNow()};
   paHist(req, PA_APPROVERS[key]+" approved", "");
   const prog=paApprovalProgress(req);
@@ -14093,31 +14426,72 @@ function paApprove(id, key){
   req.updatedAt=paNow(); scheduleSave(); render(); paOpenDetail(id);
 }
 function paReject(id, key){
-  const note=prompt("Reason for rejection (required):");
-  if(!note||!note.trim()){ toast("Rejection needs a reason"); return; }
-  const req=paFind(id); if(!req) return;
-  req.approvals=req.approvals||{}; req.approvals[key]={status:"rejected", by:state.currentUser||key, at:paNow(), note};
+  var existing=document.getElementById('paRejectModal');
+  if(existing) existing.remove();
+  var modal=document.createElement('div');
+  modal.id='paRejectModal';
+  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:800;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML='<div style="background:#fff;border-radius:12px;padding:20px;max-width:400px;width:90%">'+
+    '<h3 style="margin:0 0 8px;font-size:15px;color:#B91C1C">Reject — '+(PA_APPROVERS[key]||key)+'</h3>'+
+    '<p style="font-size:12px;color:#6B7280;margin:0 0 12px">This will return the request to Vendor Analysis for revision.</p>'+
+    '<textarea id="paRejectNote" rows="3" placeholder="Reason for rejection (required)" style="width:100%;padding:8px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;box-sizing:border-box;resize:vertical"></textarea>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'+
+      '<button class="btn" onclick="document.getElementById(\'paRejectModal\').remove()">Cancel</button>'+
+      '<button class="btn" style="background:#FEE2E2;color:#B91C1C;border-color:#FECACA" onclick="paRejectSubmit(\''+id+'\',\''+key+'\')">Reject</button>'+
+    '</div></div>';
+  document.body.appendChild(modal);
+  setTimeout(function(){ var el=document.getElementById('paRejectNote'); if(el) el.focus(); },50);
+}
+function paRejectSubmit(id, key){
+  var note=(document.getElementById('paRejectNote').value||'').trim();
+  if(!note){ toast("Rejection needs a reason"); return; }
+  var modal=document.getElementById('paRejectModal'); if(modal) modal.remove();
+  var req=paFind(id); if(!req) return;
+  req.approvals=req.approvals||{}; req.approvals[key]={status:"rejected", by:state.currentUser||key, at:paNow(), note:note};
   req.stage="vendor_analysis"; req.stageEnteredAt=paNow();
   paHist(req, PA_APPROVERS[key]+" rejected", note);
   req.updatedAt=paNow(); scheduleSave(); render(); paOpenDetail(id);
 }
 function paIssuePO(id){
-  const po=prompt("PO number:");
-  if(!po||!po.trim()) return;
-  const req=paFind(id); if(!req) return;
-  req.poNumber=po.trim(); req.updatedAt=paNow();
-  paHist(req,"PO issued","PO# "+po.trim());
+  var req=paFind(id); if(!req) return;
+  var po=paAutoPoNumber();
+  req.poNumber=po; req.updatedAt=paNow();
+  paHist(req,"PO issued","PO# "+po);
   scheduleSave(); render(); paOpenDetail(id);
+  toast("PO "+po+" issued");
+  // Auto-send PO to vendor via WhatsApp if enabled
+  if(state.paAutoNotifyPO){ setTimeout(function(){ paSendPOToVendor(id); },300); }
 }
 function paMarkReceived(id){
-  const req=paFind(id); if(!req) return;
-  const qtyStr=prompt("Quantity received:", req.qty);
-  if(qtyStr===null) return;
-  const qty=Number(qtyStr||0);
+  var req=paFind(id); if(!req) return;
+  var existing=document.getElementById('paReceiveModal');
+  if(existing) existing.remove();
+  var modal=document.createElement('div');
+  modal.id='paReceiveModal';
+  modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:800;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML='<div style="background:#fff;border-radius:12px;padding:20px;max-width:400px;width:90%">'+
+    '<h3 style="margin:0 0 8px;font-size:15px">📦 Goods Received — '+esc(req.id)+'</h3>'+
+    '<p style="font-size:12px;color:#6B7280;margin:0 0 12px">Ordered: <b>'+Number(req.qty||0).toLocaleString()+'</b> units of '+esc(req.itemName)+'</p>'+
+    '<div><label style="font-size:11px;font-weight:600;color:#6B7280">QUANTITY RECEIVED</label>'+
+    '<input id="paReceivedQty" type="number" value="'+Number(req.qty||0)+'" min="0" style="width:100%;padding:8px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;box-sizing:border-box;margin-top:4px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'+
+      '<button class="btn" onclick="document.getElementById(\'paReceiveModal\').remove()">Cancel</button>'+
+      '<button class="btn primary" onclick="paMarkReceivedSubmit(\''+req.id+'\')">Confirm receipt</button>'+
+    '</div></div>';
+  document.body.appendChild(modal);
+  setTimeout(function(){ var el=document.getElementById('paReceivedQty'); if(el){ el.focus(); el.select(); } },50);
+}
+function paMarkReceivedSubmit(id){
+  var modal=document.getElementById('paReceiveModal');
+  var qty=Number((document.getElementById('paReceivedQty').value||'0'));
+  if(modal) modal.remove();
+  var req=paFind(id); if(!req) return;
   req.receivedQty=qty; req.receivedAt=paNow(); req.stage="received"; req.stageEnteredAt=paNow(); req.updatedAt=paNow();
-  const mismatch=qty!==Number(req.qty||0);
-  paHist(req,"Goods received", `Received ${qty} of ${req.qty} ordered`+(mismatch?" ⚠ quantity mismatch":""));
+  var mismatch=qty!==Number(req.qty||0);
+  paHist(req,"Goods received", "Received "+qty+" of "+req.qty+" ordered"+(mismatch?" ⚠ quantity mismatch":""));
   scheduleSave(); render(); paOpenDetail(id);
+  // Auto-notify field rep if linked issue exists and enabled
+  if(state.paAutoNotifyRep){ setTimeout(function(){ paNotifyFieldRep(id,'received'); },300); }
 }
 function paDeleteRequest(id){
   if(!confirm("Delete this purchase request? This cannot be undone.")) return;
@@ -14126,6 +14500,716 @@ function paDeleteRequest(id){
   const ov=document.getElementById('paDetailScrim'); if(ov) ov.remove();
   render();
 }
+
+/* ---- PA Helper: render a single Kanban card ---- */
+function paCard(req){
+  var est=paEstValue(req); var tier=paTier(est); var days=paDaysIn(req);
+  var dayColor=days<=3?'#22C55E':days<=7?'#F59E0B':'#EF4444';
+  var urgBadge=req.urgency==='Urgent'?'<span style="background:#FEE2E2;color:#B91C1C;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:4px">URGENT</span>':'';
+  var prog=paApprovalProgress(req);
+  var approverChips='';
+  if(req.stage==='pending_approval'||req.stage==='approved'||req.stage==='received'){
+    prog.need.forEach(function(k){
+      var a=req.approvals&&req.approvals[k]?req.approvals[k]:{status:'pending'};
+      var bg=a.status==='approved'?'#DCFCE7':a.status==='rejected'?'#FEE2E2':'#F3F4F6';
+      var fg=a.status==='approved'?'#166534':a.status==='rejected'?'#B91C1C':'#6B7280';
+      var icon=a.status==='approved'?'✓':a.status==='rejected'?'✕':'…';
+      approverChips+='<span style="display:inline-flex;align-items:center;gap:2px;background:'+bg+';color:'+fg+';font-size:9px;font-weight:600;padding:1px 5px;border-radius:4px">'+icon+' '+(PA_APPROVERS[k]||k)+'</span> ';
+    });
+  }
+  return '<div onclick="paOpenDetail(\''+req.id+'\')" style="background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;cursor:pointer;transition:box-shadow .15s" onmouseenter="this.style.boxShadow=\'0 2px 8px rgba(0,0,0,.08)\'" onmouseleave="this.style.boxShadow=\'none\'">'+
+    '<div style="font-weight:600;font-size:12px;color:#1E293B;margin-bottom:4px;line-height:1.3">'+esc(req.itemName||'Untitled')+urgBadge+'</div>'+
+    '<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#6B7280;margin-bottom:4px">'+
+      '<span>'+esc(req.id)+'</span>'+
+      '<span>·</span>'+
+      '<span>Qty '+Number(req.qty||0).toLocaleString()+'</span>'+
+      (est>0?'<span>·</span><span>AED '+Math.round(est).toLocaleString()+'</span>':'')+
+    '</div>'+
+    '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">'+
+      '<span style="background:#EEF2F4;color:#374151;font-size:9px;font-weight:600;padding:1px 5px;border-radius:4px">'+tier.label+'</span>'+
+      '<span style="font-size:10px;color:'+dayColor+';font-weight:600">'+days+'d in stage</span>'+
+    '</div>'+
+    (approverChips?'<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">'+approverChips+'</div>':'')+
+    (req.requestedByName?'<div style="font-size:10px;color:#9CA3AF;margin-top:3px">by '+esc(req.requestedByName)+'</div>':'')+
+  '</div>';
+}
+
+/* ---- PA Helper: small labeled field box for detail modal ---- */
+function paFieldBox(label, value){
+  return '<div style="flex:1;min-width:120px"><div style="font-size:10px;font-weight:600;color:#9CA3AF;text-transform:uppercase;margin-bottom:2px">'+label+'</div><div style="font-size:13px;font-weight:600;color:#1E293B">'+value+'</div></div>';
+}
+
+/* ---- PA Helper: vendor table cell ---- */
+function paVCell(val, editable, onchange){
+  if(!editable) return '<td style="font-size:12px;padding:6px 8px">'+esc(String(val||''))+'</td>';
+  return '<td style="padding:4px"><input type="text" value="'+esc(String(val||''))+'" onchange="'+onchange+'" style="width:100%;padding:4px 6px;border:1px solid #E2E8F0;border-radius:6px;font-size:11px;box-sizing:border-box"></td>';
+}
+
+/* ---- PA Detail Modal ---- */
+function paOpenDetail(id){
+  var req=paFind(id); if(!req) return;
+  var existing=document.getElementById('paDetailScrim');
+  if(existing) existing.remove();
+  var est=paEstValue(req); var tier=paTier(est); var prog=paApprovalProgress(req);
+  var vendor=paSelectedVendor(req);
+  var days=paDaysIn(req);
+  var editable=(req.stage==='requested'||req.stage==='vendor_analysis');
+  var stageLabel=(PA_STAGES.find(function(s){return s.id===req.stage})||{label:req.stage}).label;
+
+  var h='<div class="modal" style="max-width:700px;max-height:90vh;overflow:auto">';
+  // Header
+  h+='<div style="padding:18px 22px;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;justify-content:space-between">';
+  h+='<div><h2 style="margin:0;font-size:16px">'+esc(req.id)+' — '+esc(req.itemName||'')+'</h2>';
+  h+='<div style="font-size:11px;color:#6B7280;margin-top:2px">Stage: <b>'+esc(stageLabel)+'</b> · '+days+' day'+(days!==1?'s':'')+' · '+tier.label+'</div></div>';
+  h+='<button onclick="document.getElementById(\'paDetailScrim\').remove()" style="border:none;background:none;font-size:18px;cursor:pointer;color:#9CA3AF">✕</button></div>';
+
+  // Stage stepper
+  h+='<div style="display:flex;gap:0;padding:12px 22px;border-bottom:1px solid #E2E8F0">';
+  PA_STAGES.forEach(function(s,i){
+    var active=s.id===req.stage;
+    var past=PA_STAGES.findIndex(function(x){return x.id===req.stage})>i;
+    var bg=active?'#3B82F6':past?'#22C55E':'#E5E7EB';
+    var fg=active||past?'#fff':'#9CA3AF';
+    h+='<div style="flex:1;text-align:center;padding:6px 4px;background:'+bg+';color:'+fg+';font-size:10px;font-weight:600;'+(i===0?'border-radius:6px 0 0 6px;':'')+(i===PA_STAGES.length-1?'border-radius:0 6px 6px 0;':'')+'">'+s.icon+' '+s.label+'</div>';
+  });
+  h+='</div>';
+
+  // Info grid
+  h+='<div style="padding:16px 22px;border-bottom:1px solid #E2E8F0;display:flex;flex-wrap:wrap;gap:12px">';
+  h+=paFieldBox('Item', esc(req.itemName||''));
+  h+=paFieldBox('Quantity', Number(req.qty||0).toLocaleString());
+  h+=paFieldBox('Urgency', req.urgency||'Normal');
+  h+=paFieldBox('Requested by', esc((req.requestedByName||'')+(req.requestedByRole?' ('+req.requestedByRole+')':'')));
+  h+=paFieldBox('Est. Value', 'AED '+Math.round(est).toLocaleString());
+  h+=paFieldBox('Created', (req.createdAt||'').slice(0,10));
+  if(req.reason) h+=paFieldBox('Reason', esc(req.reason));
+  h+='</div>';
+
+  // Vendor analysis table
+  h+='<div style="padding:16px 22px;border-bottom:1px solid #E2E8F0">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+  h+='<div style="font-weight:700;font-size:13px;color:#374151">Vendor Analysis</div>';
+  if(editable) h+='<button class="btn" onclick="paAddVendor(\''+req.id+'\')">+ Add vendor</button>';
+  h+='</div>';
+  if(req.vendors&&req.vendors.length){
+    h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+    h+='<thead><tr style="background:#F8FAFC;border-bottom:1px solid #E2E8F0">';
+    ['','Vendor','Price','Qty','Bonus','UTL','Expiry','Return','Notes'].forEach(function(col){
+      h+='<th style="padding:6px 8px;text-align:left;font-size:10px;font-weight:600;color:#6B7280">'+col+'</th>';
+    });
+    h+='</tr></thead><tbody>';
+    req.vendors.forEach(function(v,idx){
+      var recBg=v.recommended?'background:#F0FDF4;':'';
+      h+='<tr style="border-bottom:1px solid #F3F4F6;'+recBg+'">';
+      h+='<td style="padding:4px 8px"><input type="radio" name="paVendorRec_'+req.id+'" '+(v.recommended?'checked':'')+' onchange="paSetRecommended(\''+req.id+'\','+idx+')"></td>';
+      h+=paVCell(v.name, editable, "paUpdateVendor(\'"+req.id+"\',"+idx+",'name',this.value)");
+      h+=paVCell(v.unitPrice, editable, "paUpdateVendor(\'"+req.id+"\',"+idx+",'unitPrice',this.value)");
+      h+=paVCell(v.qty, editable, "paUpdateVendor(\'"+req.id+"\',"+idx+",'qty',this.value)");
+      h+=paVCell(v.bonus, editable, "paUpdateVendor(\'"+req.id+"\',"+idx+",'bonus',this.value)");
+      h+=paVCell(v.utlDays, editable, "paUpdateVendor(\'"+req.id+"\',"+idx+",'utlDays',this.value)");
+      h+=paVCell(v.expiryMgmt, editable, "paUpdateVendor(\'"+req.id+"\',"+idx+",'expiryMgmt',this.value)");
+      h+=paVCell(v.returnPolicy, editable, "paUpdateVendor(\'"+req.id+"\',"+idx+",'returnPolicy',this.value)");
+      h+=paVCell(v.notes, editable, "paUpdateVendor(\'"+req.id+"\',"+idx+",'notes',this.value)");
+      if(editable) h+='<td style="padding:4px"><button onclick="paRemoveVendor(\''+req.id+'\','+idx+')" style="border:none;background:none;color:#EF4444;cursor:pointer;font-size:14px">✕</button></td>';
+      h+='</tr>';
+    });
+    h+='</tbody></table></div>';
+  } else {
+    h+='<div style="font-size:12px;color:#9CA3AF;padding:10px;text-align:center;border:1px dashed #E2E8F0;border-radius:8px">No vendors added yet</div>';
+  }
+  h+='</div>';
+
+  // Approvals section
+  if(req.stage==='pending_approval'||req.stage==='approved'||req.stage==='received'){
+    h+='<div style="padding:16px 22px;border-bottom:1px solid #E2E8F0">';
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="font-weight:700;font-size:13px;color:#374151">Approvals ('+tier.label+')</div>';
+    if(req.stage==='pending_approval') h+='<button class="btn" style="font-size:10px;padding:3px 10px;background:#DCFCE7;color:#166534;border-color:#BBF7D0" onclick="paNotifyApprovers(\''+req.id+'\')">📱 WhatsApp Approvers</button>';
+    h+='</div>';
+    h+='<div style="display:flex;flex-wrap:wrap;gap:10px">';
+    prog.need.forEach(function(k){
+      var a=req.approvals&&req.approvals[k]?req.approvals[k]:{status:'pending'};
+      var bg=a.status==='approved'?'#F0FDF4':a.status==='rejected'?'#FEF2F2':'#F9FAFB';
+      var border=a.status==='approved'?'#BBF7D0':a.status==='rejected'?'#FECACA':'#E5E7EB';
+      h+='<div style="flex:1;min-width:140px;background:'+bg+';border:1px solid '+border+';border-radius:10px;padding:12px">';
+      h+='<div style="font-weight:700;font-size:12px;margin-bottom:4px">'+(PA_APPROVERS[k]||k)+'</div>';
+      if(a.status==='approved'){
+        h+='<div style="color:#166534;font-size:11px;font-weight:600">✓ Approved</div>';
+        if(a.at) h+='<div style="color:#6B7280;font-size:10px">'+a.at.slice(0,10)+'</div>';
+      } else if(a.status==='rejected'){
+        h+='<div style="color:#B91C1C;font-size:11px;font-weight:600">✕ Rejected</div>';
+        if(a.note) h+='<div style="color:#6B7280;font-size:10px;margin-top:2px">'+esc(a.note)+'</div>';
+      } else if(req.stage==='pending_approval'){
+        h+='<div style="display:flex;gap:6px;margin-top:4px">';
+        h+='<button class="btn primary" style="font-size:11px;padding:4px 10px" onclick="paApprove(\''+req.id+'\',\''+k+'\')">Approve</button>';
+        h+='<button class="btn" style="font-size:11px;padding:4px 10px;color:#B91C1C" onclick="paReject(\''+req.id+'\',\''+k+'\')">Reject</button>';
+        h+='</div>';
+      } else {
+        h+='<div style="color:#6B7280;font-size:11px">Pending</div>';
+      }
+      h+='</div>';
+    });
+    h+='</div></div>';
+  }
+
+  // PO & Receiving section
+  if(req.stage==='approved'||req.stage==='received'){
+    h+='<div style="padding:16px 22px;border-bottom:1px solid #E2E8F0">';
+    h+='<div style="font-weight:700;font-size:13px;color:#374151;margin-bottom:8px">PO & Receiving</div>';
+    if(!req.poNumber && req.stage==='approved'){
+      h+='<button class="btn primary" onclick="paIssuePO(\''+req.id+'\')">Issue PO</button>';
+    } else if(req.poNumber){
+      h+='<div style="font-size:12px;margin-bottom:6px"><b>PO#:</b> '+esc(req.poNumber)+' <button class="btn" style="font-size:10px;padding:2px 8px;margin-left:6px" onclick="paPrintPO(\''+req.id+'\')" title="Print PO document">🖨 Print PO</button>'+
+      ' <button class="btn" style="font-size:10px;padding:2px 8px;background:#DCFCE7;color:#166534;border-color:#BBF7D0" onclick="paSendPOToVendor(\''+req.id+'\')" title="Send PO to vendor via WhatsApp">📱 WhatsApp Vendor</button></div>';
+      if(req.stage==='approved'){
+        h+='<button class="btn primary" onclick="paMarkReceived(\''+req.id+'\')">Mark received</button>';
+      }
+    }
+    if(req.receivedQty!=null){
+      var mismatch=Number(req.receivedQty)!==Number(req.qty||0);
+      h+='<div style="font-size:12px;margin-top:6px'+(mismatch?';color:#B91C1C;font-weight:600':'')+'">Received: '+Number(req.receivedQty).toLocaleString()+' of '+Number(req.qty||0).toLocaleString()+(mismatch?' ⚠ MISMATCH':'')+'</div>';
+    }
+    // Check for linked field issue and show rep notification buttons
+    var _linkedFI=null;
+    (state.fieldIssues||[]).forEach(function(fi){
+      if(fi.paId===req.id||(!_linkedFI&&fi.medicine&&req.itemName&&fi.medicine.toUpperCase().trim()===req.itemName.toUpperCase().trim()&&fi.status!=='resolved')) _linkedFI=fi;
+    });
+    if(_linkedFI){
+      h+='<div style="margin-top:8px;padding:8px 10px;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;font-size:11px">';
+      h+='<span style="font-weight:600;color:#0369A1">🔗 Linked field request:</span> '+esc(_linkedFI.id||'')+' (Rep: '+esc(_linkedFI.rep||'')+', '+esc(_linkedFI.pharmacy||'')+') ';
+      if(req.poNumber) h+='<button class="btn" style="font-size:10px;padding:2px 8px;background:#DCFCE7;color:#166534;border-color:#BBF7D0;margin-left:4px" onclick="paNotifyFieldRep(\''+req.id+'\',\'ordered\')">📱 Notify: Ordered</button> ';
+      if(req.receivedQty!=null) h+='<button class="btn" style="font-size:10px;padding:2px 8px;background:#DCFCE7;color:#166534;border-color:#BBF7D0;margin-left:4px" onclick="paNotifyFieldRep(\''+req.id+'\',\'received\')">📱 Notify: Received</button>';
+      h+='</div>';
+    }
+    h+='</div>';
+  }
+
+  // Stage action buttons
+  h+='<div style="padding:12px 22px;border-bottom:1px solid #E2E8F0;display:flex;gap:8px;flex-wrap:wrap">';
+  if(req.stage==='requested') h+='<button class="btn primary" onclick="paToVendorAnalysis(\''+req.id+'\')">→ Send to Vendor Analysis</button>';
+  if(req.stage==='vendor_analysis') h+='<button class="btn primary" onclick="paToPendingApproval(\''+req.id+'\')">→ Send for Approval</button>';
+  h+='<button class="btn" style="margin-left:auto;color:#EF4444" onclick="paDeleteRequest(\''+req.id+'\')">Delete</button>';
+  h+='</div>';
+
+  // Audit trail
+  h+='<div style="padding:16px 22px">';
+  h+='<div style="font-weight:700;font-size:13px;color:#374151;margin-bottom:8px">History</div>';
+  var history=(req.history||[]).slice().reverse();
+  if(history.length){
+    history.forEach(function(ev){
+      h+='<div style="display:flex;gap:8px;font-size:11px;padding:4px 0;border-bottom:1px solid #F3F4F6">';
+      h+='<span style="color:#9CA3AF;white-space:nowrap;min-width:70px">'+(ev.at||'').slice(0,10)+'</span>';
+      h+='<span style="font-weight:600;color:#374151">'+esc(ev.action||'')+'</span>';
+      if(ev.note) h+='<span style="color:#6B7280">'+esc(ev.note)+'</span>';
+      if(ev.by) h+='<span style="color:#9CA3AF;margin-left:auto">'+esc(ev.by)+'</span>';
+      h+='</div>';
+    });
+  } else {
+    h+='<div style="font-size:12px;color:#9CA3AF">No history yet</div>';
+  }
+  h+='</div></div>';
+
+  var overlay=document.createElement('div');
+  overlay.id='paDetailScrim'; overlay.className='scrim show'; overlay.style.zIndex=700;
+  overlay.innerHTML=h;
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+/* ---- PA Excel Export ---- */
+function paDownloadAll(){
+  var list=paList(); if(!list.length){ toast("No purchase requests to export"); return; }
+  var rows=[["ID","Item","Qty","Urgency","Stage","Requested By","Role","Reason","Est Value (AED)","Tier","PO#","Received Qty","Created","Updated"]];
+  list.forEach(function(r){
+    rows.push([r.id, r.itemName, r.qty, r.urgency, r.stage, r.requestedByName||'', r.requestedByRole||'', r.reason||'',
+      Math.round(paEstValue(r)), paTier(paEstValue(r)).label, r.poNumber||'', r.receivedQty!=null?r.receivedQty:'', (r.createdAt||'').slice(0,10), (r.updatedAt||'').slice(0,10)]);
+  });
+  var histRows=[["Request ID","Item","Date","Action","Note","By"]];
+  list.forEach(function(r){
+    (r.history||[]).forEach(function(ev){
+      histRows.push([r.id, r.itemName, (ev.at||'').slice(0,19), ev.action||'', ev.note||'', ev.by||'']);
+    });
+  });
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Requests');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(histRows), 'Audit Trail');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(paBudgetExportRows()), 'Budget Summary');
+  XLSX.writeFile(wb, 'Purchase_Approvals_'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+function paBudgetExportRows(){
+  var budget=Number(state.purchasingBudget)||0;
+  var committed=paList().filter(function(r){return r.stage!=='received';}).reduce(function(s,r){return s+paEstValue(r);},0);
+  return [["Monthly Budget (AED)","Committed (AED)","Remaining (AED)","Utilisation %"],
+    [budget, Math.round(committed), Math.round(budget-committed), budget>0?Math.round(committed/budget*100)+'%':'N/A']];
+}
+
+
+
+
+
+
+/* ══════ PA WhatsApp Integration ══════ */
+
+/* Approver phone lookup — stored in state.paApproverContacts = {finance:'971...', md:'971...', gm:'971...'} */
+function paApproverPhone(role){
+  if(!state.paApproverContacts) state.paApproverContacts={};
+  return (state.paApproverContacts[role]||'').replace(/[^0-9]/g,'');
+}
+
+/* Purchase dept phone — Mr. Jamal or whoever manages purchasing */
+function paPurchaseDeptPhone(){
+  return (state.paPurchaseContact||'').replace(/[^0-9]/g,'');
+}
+
+/* WhatsApp URL helper (reuses existing pattern) */
+function paWaUrl(phone, msg){
+  return 'https://wa.me/'+phone+'?text='+encodeURIComponent(msg);
+}
+
+/* ── Message templates ── */
+
+function paWaMsgApprovalNeeded(req, approverKey){
+  var est=paEstValue(req); var tier=paTier(est);
+  var vendor=paSelectedVendor(req);
+  return '⏳ *Approval Required — Vitals Drug Store*\n\n'+
+    'Request: *'+req.id+'*\n'+
+    'Item: *'+req.itemName+'*\n'+
+    'Quantity: '+Number(req.qty||0).toLocaleString()+'\n'+
+    'Est. Value: AED '+Math.round(est).toLocaleString()+'\n'+
+    'Tier: '+tier.label+' ('+tier.approvers.map(function(k){return PA_APPROVERS[k]||k;}).join(' + ')+')\n'+
+    'Vendor: '+(vendor?vendor.name:'Not selected')+'\n'+
+    'Urgency: '+(req.urgency||'Normal')+'\n'+
+    (req.reason?'Reason: '+req.reason+'\n':'')+
+    '\nYour approval as *'+(PA_APPROVERS[approverKey]||approverKey)+'* is required.\n'+
+    '\n— Vitals Purchase Team';
+}
+
+function paWaMsgNewRequest(req){
+  var est=paEstValue(req);
+  return '📝 *New Purchase Request — Vitals Drug Store*\n\n'+
+    'Request: *'+req.id+'*\n'+
+    'Item: *'+req.itemName+'*\n'+
+    'Quantity: '+Number(req.qty||0).toLocaleString()+'\n'+
+    'Urgency: '+(req.urgency||'Normal')+'\n'+
+    'Requested by: '+(req.requestedByName||'—')+' ('+(req.requestedByRole||'—')+')\n'+
+    (req.reason?'Reason: '+req.reason+'\n':'')+
+    (est>0?'Est. Value: AED '+Math.round(est).toLocaleString()+'\n':'')+
+    '\nPlease review and begin vendor analysis.\n'+
+    '\n— Vitals System';
+}
+
+function paWaMsgPOToVendor(req){
+  var vendor=paSelectedVendor(req);
+  var est=paEstValue(req);
+  return '*Purchase Order '+req.poNumber+'*\n'+
+    'Vitals Drug Store LLC\n\n'+
+    'Dear '+(vendor?vendor.name:'Supplier')+',\n\n'+
+    'Please find our order below:\n\n'+
+    '1. '+req.itemName+' — Qty: '+Number(req.qty||0).toLocaleString()+
+    (vendor&&vendor.bonus?' (Bonus: '+vendor.bonus+')':'')+
+    ' @ AED '+(vendor?Number(vendor.unitPrice||0).toFixed(2):'—')+'\n\n'+
+    '*Total: AED '+Math.round(est).toLocaleString()+'*\n\n'+
+    'Kind regards,\nVitals Drug Store LLC';
+}
+
+function paWaMsgRepUpdate(issue, req, type){
+  var rep=issue.rep||'Team';
+  if(type==='ordered'){
+    return '📦 *Order Placed — Vitals Drug Store*\n\n'+
+      'Hi '+rep+',\n\n'+
+      (issue.medicine||req.itemName)+' has been ordered.\n'+
+      'PO#: '+(req.poNumber||'Pending')+'\n'+
+      'Qty: '+Number(req.qty||0).toLocaleString()+'\n'+
+      (issue.pharmacy?'For: '+issue.pharmacy+'\n':'')+
+      'Expected delivery: within lead time.\n'+
+      '\n— Vitals Team';
+  }
+  if(type==='received'){
+    return '✅ *Stock Received — Vitals Drug Store*\n\n'+
+      'Hi '+rep+',\n\n'+
+      (issue.medicine||req.itemName)+' is now back in stock.\n'+
+      'Received: '+(req.receivedQty!=null?req.receivedQty:req.qty)+' units\n'+
+      (issue.pharmacy?'Requested by: '+issue.pharmacy+'\n':'')+
+      'You can process orders now.\n'+
+      '\n— Vitals Team';
+  }
+  return '';
+}
+
+/* ── Send actions ── */
+
+/* Notify all required approvers for a request */
+function paNotifyApprovers(id){
+  var req=paFind(id); if(!req) return;
+  var prog=paApprovalProgress(req);
+  var pending=prog.need.filter(function(k){return !req.approvals[k]||req.approvals[k].status==='pending';});
+  if(!pending.length){toast('All approvers have already acted');return;}
+  var sent=0;
+  pending.forEach(function(k){
+    var phone=paApproverPhone(k);
+    if(!phone){
+      toast('No WhatsApp number for '+(PA_APPROVERS[k]||k)+' — set it in PA Settings');
+      return;
+    }
+    window.open(paWaUrl(phone, paWaMsgApprovalNeeded(req,k)),'_blank');
+    sent++;
+  });
+  if(sent>0){
+    paHist(req,'WhatsApp sent','Approval notification sent to '+sent+' approver'+(sent>1?'s':''));
+    req.updatedAt=paNow(); scheduleSave();
+  }
+}
+
+/* Notify purchase dept of a new request */
+function paNotifyPurchaseDept(id){
+  var req=paFind(id); if(!req) return;
+  var phone=paPurchaseDeptPhone();
+  if(!phone){toast('No Purchase Dept WhatsApp number — set it in PA Settings');return;}
+  window.open(paWaUrl(phone, paWaMsgNewRequest(req)),'_blank');
+  paHist(req,'WhatsApp sent','New request notification sent to Purchase Dept');
+  req.updatedAt=paNow(); scheduleSave();
+}
+
+/* Send PO to vendor via WhatsApp */
+function paSendPOToVendor(id){
+  var req=paFind(id); if(!req||!req.poNumber) return;
+  var vendor=paSelectedVendor(req);
+  var vendorName=vendor?vendor.name:'';
+  if(!vendorName){toast('No vendor selected');return;}
+  // Look up phone from supplier WhatsApp contacts (reuse existing state.supplierWhatsapp)
+  if(!state.supplierWhatsapp) state.supplierWhatsapp={};
+  var phone=(state.supplierWhatsapp[vendorName]||'').replace(/[^0-9]/g,'');
+  if(!phone){
+    var entered=prompt('WhatsApp number for '+vendorName+' — include country code, digits only (e.g. 971501234567). Saved for next time:');
+    if(entered){ phone=entered.replace(/[^0-9]/g,''); if(phone){ state.supplierWhatsapp[vendorName]=phone; scheduleSave(); } }
+  }
+  if(!phone){toast('No WhatsApp number entered');return;}
+  window.open(paWaUrl(phone, paWaMsgPOToVendor(req)),'_blank');
+  paHist(req,'WhatsApp sent','PO sent to vendor '+vendorName+' via WhatsApp');
+  req.updatedAt=paNow(); scheduleSave();
+  render(); paOpenDetail(id);
+}
+
+/* Notify field rep when their requested medicine has been ordered or received */
+function paNotifyFieldRep(id, type){
+  var req=paFind(id); if(!req) return;
+  // Find linked field issue
+  var linkedIssue=null;
+  (state.fieldIssues||[]).forEach(function(issue){
+    if(issue.paId===req.id) linkedIssue=issue;
+  });
+  if(!linkedIssue){
+    // Try matching by medicine name
+    (state.fieldIssues||[]).forEach(function(issue){
+      if(!linkedIssue && issue.medicine && req.itemName &&
+         issue.medicine.toUpperCase().trim()===req.itemName.toUpperCase().trim() &&
+         issue.status!=='resolved'){
+        linkedIssue=issue;
+      }
+    });
+  }
+  if(!linkedIssue){toast('No linked field request found for this item');return;}
+  var phone=fiRepPhone(linkedIssue.rep);
+  if(!phone){toast('No phone number for rep '+linkedIssue.rep);return;}
+  var msg=paWaMsgRepUpdate(linkedIssue, req, type);
+  if(!msg){toast('Invalid message type');return;}
+  window.open(paWaUrl(phone, msg),'_blank');
+  paHist(req,'WhatsApp sent','Rep '+linkedIssue.rep+' notified: '+type);
+  // Also update the field issue history
+  linkedIssue.history=linkedIssue.history||[];
+  linkedIssue.history.push({date:paNow(), note:'PA '+req.id+' '+type+' — rep notified via WhatsApp'});
+  req.updatedAt=paNow(); scheduleSave();
+}
+
+/* ── PA Settings modal for WhatsApp contacts ── */
+function paOpenSettings(){
+  var existing=document.getElementById('paSettingsScrim');
+  if(existing) existing.remove();
+  if(!state.paApproverContacts) state.paApproverContacts={};
+  var overlay=document.createElement('div');
+  overlay.id='paSettingsScrim'; overlay.className='scrim show'; overlay.style.zIndex=750;
+  var h='<div class="modal" style="max-width:520px">';
+  h+='<div style="padding:18px 22px;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;justify-content:space-between">';
+  h+='<h2 style="margin:0;font-size:16px">⚙ PA WhatsApp Settings</h2>';
+  h+='<button onclick="document.getElementById(\'paSettingsScrim\').remove()" style="border:none;background:none;font-size:18px;cursor:pointer;color:#9CA3AF">✕</button></div>';
+  h+='<div style="padding:18px 22px">';
+
+  // Purchase Dept contact
+  h+='<div style="margin-bottom:16px">';
+  h+='<div style="font-weight:700;font-size:13px;color:#374151;margin-bottom:8px">📦 Purchase Department</div>';
+  h+='<div style="display:flex;gap:8px;align-items:center">';
+  h+='<input type="text" id="paCfgPurchasePhone" value="'+(state.paPurchaseContact||'')+'" placeholder="e.g. 971501234567" style="flex:1;padding:8px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;font-family:monospace">';
+  h+='<span style="font-size:11px;color:#6B7280">Mr. Jamal</span>';
+  h+='</div></div>';
+
+  // Approver contacts
+  h+='<div style="margin-bottom:16px">';
+  h+='<div style="font-weight:700;font-size:13px;color:#374151;margin-bottom:8px">✅ Approver Contacts</div>';
+  ['finance','md','gm'].forEach(function(k){
+    h+='<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">';
+    h+='<span style="min-width:70px;font-size:12px;font-weight:600">'+(PA_APPROVERS[k]||k)+'</span>';
+    h+='<input type="text" id="paCfg_'+k+'" value="'+(state.paApproverContacts[k]||'')+'" placeholder="e.g. 971501234567" style="flex:1;padding:8px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;font-family:monospace">';
+    h+='</div>';
+  });
+  h+='</div>';
+
+  // Auto-notify toggles
+  h+='<div style="margin-bottom:16px">';
+  h+='<div style="font-weight:700;font-size:13px;color:#374151;margin-bottom:8px">🔔 Auto-open WhatsApp when...</div>';
+  h+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:6px;cursor:pointer"><input type="checkbox" id="paCfgAutoNotifyNew" '+(state.paAutoNotifyNew?'checked':'')+'> New request is created (notify Purchase Dept)</label>';
+  h+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:6px;cursor:pointer"><input type="checkbox" id="paCfgAutoNotifyApproval" '+(state.paAutoNotifyApproval?'checked':'')+'> Request sent for approval (notify approvers)</label>';
+  h+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:6px;cursor:pointer"><input type="checkbox" id="paCfgAutoNotifyPO" '+(state.paAutoNotifyPO?'checked':'')+'> PO issued (send PO to vendor)</label>';
+  h+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="paCfgAutoNotifyRep" '+(state.paAutoNotifyRep?'checked':'')+'> Goods received (notify field rep if linked)</label>';
+  h+='</div>';
+
+  // Save button
+  h+='<div style="display:flex;justify-content:flex-end;gap:8px">';
+  h+='<button class="btn" onclick="document.getElementById(\'paSettingsScrim\').remove()">Cancel</button>';
+  h+='<button class="btn primary" onclick="paSaveSettings()">Save settings</button>';
+  h+='</div></div></div>';
+
+  overlay.innerHTML=h;
+  document.body.appendChild(overlay);
+}
+
+function paSaveSettings(){
+  if(!state.paApproverContacts) state.paApproverContacts={};
+  state.paPurchaseContact=(document.getElementById('paCfgPurchasePhone').value||'').trim();
+  ['finance','md','gm'].forEach(function(k){
+    state.paApproverContacts[k]=(document.getElementById('paCfg_'+k).value||'').trim();
+  });
+  state.paAutoNotifyNew=document.getElementById('paCfgAutoNotifyNew').checked;
+  state.paAutoNotifyApproval=document.getElementById('paCfgAutoNotifyApproval').checked;
+  state.paAutoNotifyPO=document.getElementById('paCfgAutoNotifyPO').checked;
+  state.paAutoNotifyRep=document.getElementById('paCfgAutoNotifyRep').checked;
+  scheduleSave();
+  document.getElementById('paSettingsScrim').remove();
+  toast('PA WhatsApp settings saved');
+  renderPurchaseApprovalTab();
+}
+
+
+/* ══════ PHASE 6: Budget Gate ══════ */
+function paBudgetStatus(){
+  var budget=Number(state.purchasingBudget)||0;
+  if(!budget) return {budget:0, committed:0, remaining:0, pct:0, ok:true, noBudget:true};
+  var committed=(state.purchaseRequests||[]).filter(function(r){ return r.stage!=='received'; }).reduce(function(s,r){ return s+paEstValue(r); }, 0);
+  var remaining=budget-committed;
+  return {budget:budget, committed:Math.round(committed), remaining:Math.round(remaining), pct:Math.round(committed/budget*100), ok:remaining>=0, noBudget:false};
+}
+
+function paBudgetWarning(additionalValue){
+  var bs=paBudgetStatus();
+  if(bs.noBudget) return null; // no budget set, skip check
+  if(bs.remaining - (additionalValue||0) < 0){
+    return "⚠ This would exceed the monthly budget by AED "+Math.abs(Math.round(bs.remaining-(additionalValue||0))).toLocaleString()+". Current utilisation: "+bs.pct+"%.";
+  }
+  if(bs.pct>=80){
+    return "Budget "+bs.pct+"% utilised (AED "+bs.committed.toLocaleString()+" of "+bs.budget.toLocaleString()+"). AED "+bs.remaining.toLocaleString()+" remaining.";
+  }
+  return null;
+}
+
+
+/* ══════ PHASE 5: SLA Alerts & Escalation ══════ */
+function paSlaCheck(){
+  var urgentSla=Number(state.paSlaUrgent)||2;
+  var normalSla=Number(state.paSlaNormal)||5;
+  var alerts=[];
+  (state.purchaseRequests||[]).forEach(function(r){
+    if(r.stage==='received') return;
+    var days=paDaysIn(r);
+    var sla=r.urgency==='Urgent'?urgentSla:normalSla;
+    if(days>=sla){
+      alerts.push({req:r, days:days, sla:sla, overdue:days-sla});
+    }
+  });
+  return alerts.sort(function(a,b){ return b.overdue-a.overdue; });
+}
+
+function paSlaAlertCount(){
+  return paSlaCheck().length;
+}
+
+function paEscalate(id){
+  var req=paFind(id); if(!req) return;
+  if(req.stage==='pending_approval'){
+    var prog=paApprovalProgress(req);
+    var pending=prog.need.filter(function(k){ return !req.approvals[k]||req.approvals[k].status==='pending'; });
+    if(pending.length>0){
+      paHist(req,"SLA escalation","Request overdue — escalated to approvers: "+pending.map(function(k){return PA_APPROVERS[k]||k;}).join(', '));
+      req.updatedAt=paNow(); scheduleSave();
+      toast("Escalation logged for "+req.id);
+    }
+  } else if(req.stage==='requested'||req.stage==='vendor_analysis'){
+    paHist(req,"SLA escalation","Request overdue in "+req.stage+" — needs attention");
+    req.updatedAt=paNow(); scheduleSave();
+    toast("Escalation logged for "+req.id);
+  }
+  render();
+}
+
+
+/* ══════ PHASE 4: Auto PO number generation ══════ */
+function paAutoPoNumber(){
+  var now=new Date();
+  var ym=now.getFullYear()+String(now.getMonth()+1).padStart(2,'0');
+  var seq=state.paPoSeq||1;
+  state.paPoSeq=seq+1;
+  scheduleSave();
+  return "PO-"+ym+"-"+String(seq).padStart(4,"0");
+}
+
+/* Generate printable PO document (opens in new window) */
+function paPrintPO(id){
+  var req=paFind(id); if(!req||!req.poNumber) return;
+  var v=paSelectedVendor(req);
+  var est=paEstValue(req);
+  var approvalLines='';
+  var tier=paTier(est);
+  tier.approvers.forEach(function(k){
+    var a=req.approvals&&req.approvals[k]?req.approvals[k]:{};
+    if(a.status==='approved') approvalLines+='<tr><td>'+(PA_APPROVERS[k]||k)+'</td><td>Approved</td><td>'+(a.at||'').slice(0,10)+'</td><td>'+(a.by||'')+'</td></tr>';
+  });
+  var w=window.open('','_blank','width=800,height=600');
+  w.document.write('<html><head><title>'+req.poNumber+'</title>'+
+    '<style>body{font-family:Arial,sans-serif;padding:30px;color:#333}table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left;font-size:13px}th{background:#f5f5f5;font-weight:600}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}.po-title{font-size:24px;font-weight:700;color:#1a1a1a}@media print{body{padding:15px}}</style></head><body>'+
+    '<div class="header"><div><div class="po-title">PURCHASE ORDER</div>'+
+    '<div style="font-size:18px;font-weight:600;color:#3B82F6;margin-top:4px">'+req.poNumber+'</div></div>'+
+    '<div style="text-align:right"><div style="font-weight:700;font-size:15px">Vitals Drug Store LLC</div>'+
+    '<div style="font-size:12px;color:#666">Date: '+new Date().toLocaleDateString()+'</div></div></div>'+
+    '<table><tr><th>Vendor</th><td>'+(v?esc(v.name):'—')+'</td><th>Request ID</th><td>'+req.id+'</td></tr>'+
+    '<tr><th>Item</th><td>'+esc(req.itemName)+'</td><th>Urgency</th><td>'+(req.urgency||'Normal')+'</td></tr></table>'+
+    '<table><thead><tr><th>Item</th><th>Qty Ordered</th><th>Unit Price (AED)</th><th>Bonus</th><th>Total (AED)</th></tr></thead>'+
+    '<tbody><tr><td>'+esc(req.itemName)+'</td><td>'+Number(req.qty||0).toLocaleString()+'</td>'+
+    '<td>'+(v?Number(v.unitPrice||0).toFixed(2):'—')+'</td><td>'+(v?esc(v.bonus||'—'):'—')+'</td>'+
+    '<td>'+Math.round(est).toLocaleString()+'</td></tr></tbody></table>'+
+    (approvalLines?'<h3 style="margin-top:20px;font-size:14px">Approvals</h3><table><thead><tr><th>Role</th><th>Status</th><th>Date</th><th>By</th></tr></thead><tbody>'+approvalLines+'</tbody></table>':'')+
+    '<div style="margin-top:30px;padding-top:15px;border-top:2px solid #333;display:flex;justify-content:space-between">'+
+    '<div style="text-align:center"><div style="border-top:1px solid #999;width:180px;margin-top:40px;padding-top:4px;font-size:11px">Authorized Signature</div></div>'+
+    '<div style="text-align:center"><div style="border-top:1px solid #999;width:180px;margin-top:40px;padding-top:4px;font-size:11px">Received By</div></div></div>'+
+    '<script>setTimeout(function(){window.print()},300)<\/script></body></html>');
+  w.document.close();
+}
+
+
+/* ══════ PHASE 1: Auto-generate purchase requests from reorder engine ══════ */
+function paAutoGenerate(){
+  var generated=0, skipped=0, errors=[];
+  var existingItems={};
+  (state.purchaseRequests||[]).forEach(function(r){
+    if(r.stage!=='received'){
+      existingItems[(r.itemName||'').toUpperCase().trim()]=true;
+      if(r.linkedMedKey) existingItems[r.linkedMedKey]=true;
+    }
+  });
+
+  var candidates=[];
+  meds.forEach(function(m){
+    var sr=smartReorder(m);
+    if(!sr||sr.qty<=0) return;
+    var st=(statusOf(m)||'').toUpperCase();
+    if(st!=='OUT OF STOCK'&&st!=='LOW STOCK'&&st!=='OOS'&&st!=='LOW') return;
+    // Skip if an open PA request already exists for this medicine
+    if(existingItems[m.key]) return;
+    if(existingItems[(m.name||'').toUpperCase().trim()]) return;
+    candidates.push({med:m, reorderQty:sr.qty, status:st});
+  });
+
+  if(candidates.length===0){
+    toast("No items need reordering right now (all covered or already have open requests)");
+    return;
+  }
+
+  candidates.forEach(function(c){
+    var m=c.med;
+    var sups=suppliersOf(m);
+    var bestSup=bestSupplierFor(m);
+    var vendors=[];
+    // Phase 3: auto-fill vendors from supplier data
+    sups.slice(0,5).forEach(function(sup,idx){
+      vendors.push({
+        name:sup.supplier||'', unitPrice:sup.price!=null?String(sup.price):'',
+        qty:String(c.reorderQty), bonus:sup.bonus||'',
+        utlDays:'', expiryMgmt:sup.expiry||'', returnPolicy:'', notes:sup.notes||'',
+        recommended: bestSup&&sup.supplier===bestSup.supplier
+      });
+    });
+
+    var req={
+      id:paGenId(), createdAt:paNow(), updatedAt:paNow(), stageEnteredAt:paNow(),
+      itemName:m.name, linkedMedKey:m.key, qty:c.reorderQty,
+      requestedByRole:"System", requestedByName:"Auto-Reorder",
+      reason:"Auto-generated: "+c.status.toLowerCase()+" (reorder qty="+c.reorderQty+")",
+      urgency:c.status==='OUT OF STOCK'||c.status==='OOS'?'Urgent':'Normal',
+      vendors:vendors,
+      selectedVendorIdx:vendors.length>0?vendors.findIndex(function(v){return v.recommended;}):null,
+      poNumber:null, receivedQty:null, receivedAt:null,
+      approvals:{finance:{status:"pending"},md:{status:"pending"},gm:{status:"pending"}},
+      stage: vendors.length>0?"vendor_analysis":"requested",
+      history:[]
+    };
+    if(req.selectedVendorIdx<0) req.selectedVendorIdx=null;
+    paHist(req,"Created", "Auto-generated from reorder engine: "+c.status);
+    if(vendors.length>0){
+      paHist(req,"Vendors auto-filled", vendors.length+" vendor(s) from purchase history");
+      paHist(req,"Stage → Vendor Analysis", "Auto-advanced: vendors pre-filled for review");
+    }
+
+    // Phase 2: auto-approve if enabled and qualifies
+    if(state.paAutoApprove && vendors.length>0 && req.selectedVendorIdx!=null){
+      var est=paEstValue(req);
+      var tier=paTier(est);
+      if(tier.key==='t1' && est>0){
+        // Tier 1, known vendor, auto-approve enabled → skip to approved
+        tier.approvers.forEach(function(k){
+          req.approvals[k]={status:"approved", by:"Auto-Approve", at:paNow()};
+        });
+        paHist(req,"Auto-approved","Tier 1 routine reorder (AED "+Math.round(est).toLocaleString()+") with known vendor");
+        req.stage="approved";
+        req.stageEnteredAt=paNow();
+        // Phase 4: auto-generate PO number
+        req.poNumber=paAutoPoNumber();
+        paHist(req,"PO issued","Auto-PO# "+req.poNumber);
+        paHist(req,"Stage → Approved · PO", "Auto-advanced: Tier 1 routine reorder");
+      }
+    }
+
+    state.purchaseRequests=state.purchaseRequests||[];
+    state.purchaseRequests.unshift(req);
+    generated++;
+  });
+
+  scheduleSave(); render();
+  toast(generated+" purchase request"+(generated!==1?"s":"")+" generated"+(skipped>0?" ("+skipped+" skipped — already have open requests)":""));
+  alLog("pa_auto_gen","Auto-generated "+generated+" purchase requests", "");
+}
+
+/* Show a confirmation modal before auto-generating */
+function paAutoGenerateConfirm(){
+  var existingItems={};
+  (state.purchaseRequests||[]).forEach(function(r){
+    if(r.stage!=='received'){
+      existingItems[(r.itemName||'').toUpperCase().trim()]=true;
+      if(r.linkedMedKey) existingItems[r.linkedMedKey]=true;
+    }
+  });
+  var candidateCount=0;
+  meds.forEach(function(m){
+    var sr=smartReorder(m);
+    if(!sr||sr.qty<=0) return;
+    var st=(statusOf(m)||'').toUpperCase();
+    if(st!=='OUT OF STOCK'&&st!=='LOW STOCK'&&st!=='OOS'&&st!=='LOW') return;
+    if(existingItems[m.key]) return;
+    if(existingItems[(m.name||'').toUpperCase().trim()]) return;
+    candidateCount++;
+  });
+  if(candidateCount===0){ toast("All OOS/Low items already have open purchase requests or don't need reordering"); return; }
+  if(confirm(candidateCount+" item"+(candidateCount!==1?"s":"")+' need reordering.\n\nThis will:\n• Create purchase requests for each\n• Auto-fill vendors from purchase history\n'+(state.paAutoApprove?'• Auto-approve Tier 1 routine reorders\n':'')+'\nProceed?')){
+    paAutoGenerate();
+  }
+}
+
+
 function paRefreshDetailSoft(){ renderPurchaseApprovalTab(); }
 
 function renderPurchaseApprovalTab(){
@@ -14141,16 +15225,50 @@ function renderPurchaseApprovalTab(){
     '<div style="font-size:12px;color:var(--muted)">'+list.length+' request'+(list.length===1?'':'s')+' · AED '+Math.round(totalVal).toLocaleString()+' total pipeline value · '+paPendingCount()+' awaiting approval</div>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
       '<input type="text" placeholder="Search requests..." value="'+esc(_paSearch||'')+'" oninput="_paSearch=this.value;renderPurchaseApprovalTab()" style="padding:7px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:12px;width:180px">'+
+      '<button class="btn" onclick="paOpenSettings()">⚙ Settings</button>'+
       '<button class="btn" onclick="paDownloadAll()">↓ Download log</button>'+
+      '<button class="btn" style="background:#DBEAFE;color:#1D4ED8;border-color:#93C5FD" onclick="paAutoGenerateConfirm()">⚡ Auto-generate</button>'+
       '<button class="btn primary" onclick="paOpenNewRequest()">+ New request</button>'+
     '</div>'+
   '</div>';
-  html+='<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#374151">'+
+  // Settings row: tiers + auto-approve + SLA thresholds
+  html+='<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:#374151">'+
     '<b>Approval tiers</b>'+
     '<span>Under AED <input type="number" value="'+(state.paTierT1||5000)+'" onchange="state.paTierT1=Number(this.value)||0;scheduleSave();renderPurchaseApprovalTab()" style="width:70px;padding:3px 6px;border:1px solid #E2E8F0;border-radius:6px"> → Finance only</span>'+
     '<span>Up to AED <input type="number" value="'+(state.paTierT2||20000)+'" onchange="state.paTierT2=Number(this.value)||0;scheduleSave();renderPurchaseApprovalTab()" style="width:80px;padding:3px 6px;border:1px solid #E2E8F0;border-radius:6px"> → + MD</span>'+
-    '<span>Above → + GM (Finance + MD + GM)</span>'+
+    '<span>Above → + GM</span>'+
   '</div>';
+  // Phase 2: auto-approve toggle + Phase 5: SLA thresholds
+  html+='<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:#0C4A6E">'+
+    '<b>⚡ Automation</b>'+
+    '<label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" '+(state.paAutoApprove?'checked':'')+' onchange="state.paAutoApprove=this.checked;scheduleSave();renderPurchaseApprovalTab()"> Auto-approve Tier 1 reorders with known vendor</label>'+
+    '<span style="color:#6B7280">|</span>'+
+    '<b>SLA</b>'+
+    '<span>Urgent: <input type="number" min="1" max="30" value="'+(state.paSlaUrgent||2)+'" onchange="state.paSlaUrgent=Number(this.value)||2;scheduleSave();renderPurchaseApprovalTab()" style="width:40px;padding:3px 6px;border:1px solid #BAE6FD;border-radius:6px"> days</span>'+
+    '<span>Normal: <input type="number" min="1" max="30" value="'+(state.paSlaNormal||5)+'" onchange="state.paSlaNormal=Number(this.value)||5;scheduleSave();renderPurchaseApprovalTab()" style="width:40px;padding:3px 6px;border:1px solid #BAE6FD;border-radius:6px"> days</span>'+
+  '</div>';
+  // Phase 6: budget bar
+  var _bs=paBudgetStatus();
+  if(!_bs.noBudget){
+    var _bColor=_bs.pct>=100?'#EF4444':_bs.pct>=80?'#F59E0B':'#22C55E';
+    html+='<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
+      '<b style="color:#92400E">💰 Budget</b>'+
+      '<span>AED '+_bs.committed.toLocaleString()+' of '+_bs.budget.toLocaleString()+' committed ('+_bs.pct+'%)</span>'+
+      '<div style="flex:1;min-width:120px;height:8px;background:#FEF3C7;border-radius:4px;overflow:hidden"><div style="width:'+Math.min(_bs.pct,100)+'%;height:100%;background:'+_bColor+';border-radius:4px"></div></div>'+
+      '<span style="font-weight:600;color:'+_bColor+'">AED '+_bs.remaining.toLocaleString()+' remaining</span>'+
+    '</div>';
+  }
+  // Phase 5: SLA alerts
+  var _slaAlerts=paSlaCheck();
+  if(_slaAlerts.length>0){
+    html+='<div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:#991B1B">'+
+      '<b>🚨 '+_slaAlerts.length+' overdue request'+(_slaAlerts.length!==1?'s':'')+'</b> — ';
+    _slaAlerts.slice(0,5).forEach(function(a){
+      html+='<span style="display:inline-flex;align-items:center;gap:3px;margin-right:8px;cursor:pointer;text-decoration:underline" onclick="paOpenDetail(\''+a.req.id+'\')">'+a.req.id+' ('+a.days+'d, +'+a.overdue+'d over SLA)</span>';
+    });
+    if(_slaAlerts.length>5) html+='<span>... and '+(_slaAlerts.length-5)+' more</span>';
+    html+='</div>';
+  }
   html+='<div style="display:grid;grid-template-columns:repeat(5,minmax(220px,1fr));gap:12px;overflow-x:auto">';
   PA_STAGES.forEach(s=>{
     const items=byStage[s.id]||[];
@@ -14187,7 +15305,7 @@ const FI_TYPES = [
   {id:'enquiry',    icon:'🔍', label:'Medicine Enquiry',    auto:false},
 ];
 
-const FI_REPS = ['Abhilash','Liaquat','Anwar','Mohammad','Muhammed Fayez','Shany Joseph'];
+const FI_REPS = ['Abhilash','Liaquat','Anwar','Mohammad','Muhammed Fayez','Shany Joseph','Jaseer'];
 
 const FI_STATUS = {
   new:         {label:'New',         color:'#1D4ED8', bg:'#EFF6FF'},
@@ -14732,6 +15850,7 @@ function fiResolveModal(id){
     '<button onclick="fiConfirmResolve(\''+id+'\',\'cantresolve\')" style="flex:1;padding:10px;background:#B71C1C;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">❌ Can\'t Resolve</button>'+
     '</div>'+
     '<div style="font-size:12px;font-weight:600;color:#6B7280;margin-bottom:8px">SEND WHATSAPP TO REP?</div>'+
+    (issue.autoReply?'<div style="margin-bottom:8px"><button onclick="fiSendAutoReply(\''+issue.id+'\',this)" style="padding:6px 12px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">📱 Send Stock-Check Reply</button><span style="font-size:11px;color:#6B7280;margin-left:8px">Auto-generated from sync</span></div>':'')+
     '<div id="fi_wa_preview" style="font-size:11px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:10px;white-space:pre-wrap;color:#374151;margin-bottom:12px">'+esc(fiWhatsappMsg(issue,'resolved'))+'</div>'+
     '<div style="display:flex;gap:8px">'+
     '<button onclick="fiSendWA(\''+id+'\',\'resolved\')" style="flex:1;padding:8px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">📱 Open WhatsApp</button>'+
@@ -14804,6 +15923,7 @@ function fiNotFeasible(id){
 // ── Main render ────────────────────────────────────────────────────────────
 function renderFieldIssuesTab(){
   var el=document.getElementById('fieldIssuesTab'); if(!el) return;
+  fiAutoSyncCheck();
   var detected=fiAutoDetect();
   var allIssues=fiList();
   var active=allIssues.filter(function(i){return i.status!=='resolved'&&i.status!=='cantresolve'&&i.status!=='dismissed';});
@@ -14822,7 +15942,9 @@ function renderFieldIssuesTab(){
     }).join('')+
     '</div>'+
     '<button onclick="fiNewIssue()" style="padding:8px 16px;background:#1B4F5C;color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer">+ Log Issue</button>'+
-    '<button onclick="fiImportCSV()" style="padding:8px 12px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;font-size:12px;cursor:pointer;font-weight:600;color:#166534" title="Import issues from Google Sheet/CSV/Excel">📥 Import Sheet</button>'+
+    '<button onclick="fiGSheetSettings()" style="padding:8px 12px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;font-size:12px;cursor:pointer;font-weight:600;color:#166534" title="Configure & sync Google Sheet">📊 Google Sheet</button>'+
+    '<button onclick="fiGSheetSync()" style="padding:8px 12px;background:#166534;color:#fff;border:none;border-radius:10px;font-size:12px;cursor:pointer;font-weight:600'+(state.fiGSheetUrl?'':'opacity:0.5')+'" title="'+(state.fiGSheetUrl?'Sync now':'Set up Google Sheet first')+'">🔄 Sync</button>'+
+    '<button onclick="fiImportCSV()" style="padding:8px 12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;font-size:11px;cursor:pointer;color:#6B7280" title="Manual CSV/Excel file import">📥 File Import</button>'+
     '<button onclick="fiRepSettings()" style="padding:8px 12px;background:#F3F4F6;border:1px solid #E2E8F0;border-radius:10px;font-size:12px;cursor:pointer" title="Rep settings & phone numbers">⚙ Rep Settings</button>'+
     '<button onclick="fiMDReport()" style="padding:8px 12px;background:#7C3AED;color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer">📊 MD Report</button>'+
     (overdue.length?'<span style="padding:6px 12px;background:#FFF5F5;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#B71C1C;font-weight:600">⚠ '+overdue.length+' overdue</span>':'')+
@@ -14921,9 +16043,15 @@ function renderFieldIssuesTab(){
           (issue.bonusValue?'<div style="font-size:12px;color:#92400E;font-weight:600;margin-top:2px">🎁 Bonus claim: AED '+Number(issue.bonusValue).toLocaleString()+' ('+issue.bonusShortfall+' units × AED '+(issue.bonusRate||0).toFixed(2)+')</div>':'')+
           (issue.alternative?'<div style="font-size:12px;color:#1D4ED8;margin-top:4px">🔄 Alternative: '+esc(issue.alternative)+'</div>':'')+
           (issue.paId?'<div style="font-size:12px;color:#166534;margin-top:4px">📦 Linked to PA: '+issue.paId+'</div>':'')+
+          (issue.stockCheck==='in_stock'?'<div style="font-size:12px;color:#166534;font-weight:600;margin-top:4px">✅ In Stock ('+issue.stockQty+' units)</div>':
+           issue.stockCheck==='alternative'?'<div style="font-size:12px;color:#1D4ED8;font-weight:600;margin-top:4px">💊 Alternative available: '+esc(issue.alternative||'')+'</div>':
+           issue.stockCheck==='oos_ddc'?'<div style="font-size:12px;color:#92400E;font-weight:600;margin-top:4px">📋 DHA registered — sourcing</div>':
+           issue.stockCheck==='not_found'?'<div style="font-size:12px;color:#B71C1C;font-weight:600;margin-top:4px">⚠ Not found in system or DDC</div>':'')+
+          (issue.source==='gsheet'?'<div style="font-size:10px;color:#6B7280;margin-top:2px">📊 From Google Sheet'+(issue.waReplySent?' · ✅ Reply sent':'')+'</div>':'')+
           '</div></div>'+
           // Action buttons
           '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">'+
+          (issue.autoReply&&!issue.waReplySent?'<button onclick="fiSendAutoReply(\''+issue.id+'\',this)" style="padding:5px 10px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">📱 Reply to Rep</button>':'')+
           (issue.type==='enquiry'&&!issue.paId?
             '<button onclick="fiCreatePA(\''+issue.id+'\')" style="padding:6px 12px;background:#1D4ED8;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">📦 Start Stocking → PA</button>':'')+
           (issue.type==='enquiry'&&issue.alternative?
@@ -18130,6 +19258,7 @@ function siRenderTable(displayRows, search) {
 
 function siRowClick(e, idx) {
   if (e.target.closest('button') || e.target.tagName==='INPUT') return;
+  siToggleExpand(idx);
 }
 
 function siToggleExpand(idx) {
@@ -18334,6 +19463,202 @@ function siExportExcel() {
 }
 
 // ─── SI IMAGE OCR ─────────────────────────────────────────────────────────────
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// QUOTATION GENERATOR — Professional quotation export for customer inquiries
+// ═══════════════════════════════════════════════════════════════════════
+function siGenerateQuotation() {
+  var results = window._siResults || [];
+  if (!results.length) { alert('No matched results to generate quotation from.'); return; }
+
+  // Split into 3 sections
+  var available = [];
+  var substitutes = [];
+  var notAvailable = [];
+
+  results.forEach(function(r) {
+    if (!r) return;
+    var st = (r.status || '').toUpperCase();
+    var m = r.matched;
+
+    if (st === 'NOT FOUND') {
+      // Check if any alternates exist
+      var alts = [r.alt1, r.alt2, r.alt3, r.alt4, r.alt5].filter(function(a) { return a && a.name; });
+      var inStockAlts = alts.filter(function(a) {
+        var as = typeof statusOf === 'function' ? statusOf(a) : '';
+        return as === 'ADEQUATE' || as === 'LOW STOCK';
+      });
+      if (inStockAlts.length > 0) {
+        substitutes.push({ original: r.inputName, alternatives: inStockAlts });
+      } else {
+        notAvailable.push(r.inputName);
+      }
+    } else if (st === 'OUT OF STOCK') {
+      // Out of stock — offer alternates
+      var alts2 = [r.alt1, r.alt2, r.alt3, r.alt4, r.alt5].filter(function(a) { return a && a.name; });
+      var inStockAlts2 = alts2.filter(function(a) {
+        var as2 = typeof statusOf === 'function' ? statusOf(a) : '';
+        return as2 === 'ADEQUATE' || as2 === 'LOW STOCK';
+      });
+      if (inStockAlts2.length > 0) {
+        substitutes.push({ original: r.inputName, alternatives: inStockAlts2 });
+      } else {
+        notAvailable.push(r.inputName);
+      }
+    } else {
+      // ADEQUATE or LOW STOCK — available
+      available.push(r);
+    }
+  });
+
+  // Generate reference number
+  var now = new Date();
+  var refNum = 'VDS-' + now.getFullYear() + '-' +
+    String(now.getMonth()+1).padStart(2,'0') + '-' +
+    String(now.getDate()).padStart(2,'0') + '-' +
+    String(now.getHours()).padStart(2,'0') +
+    String(now.getMinutes()).padStart(2,'0');
+
+  var validDate = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  var validStr = validDate.getDate() + '/' + (validDate.getMonth()+1) + '/' + validDate.getFullYear();
+
+  var dateStr = now.getDate() + '/' + (now.getMonth()+1) + '/' + now.getFullYear();
+
+  // Helper to get item details for quotation
+  function getItemDetails(item) {
+    var pack = item.pack || item.form || '';
+    var price = typeof priceOf === 'function' ? priceOf(item) : (item.price || '');
+    var stock = typeof stockOf === 'function' ? stockOf(item) : (item.stock || '');
+    var expiry = typeof expiryOf === 'function' ? expiryOf(item) : (item.expiry || '');
+    var bonus = typeof bonusOf === 'function' ? bonusOf(item) : (item.bonus || '');
+    return {
+      name: item.name || '',
+      pack: pack,
+      price: price ? parseFloat(price) : '',
+      qty: stock ? String(stock) : 'In Stock',
+      expiry: expiry || '',
+      bonus: bonus || ''
+    };
+  }
+
+  // Build Excel using SheetJS
+  var wb = XLSX.utils.book_new();
+  var wsData = [];
+
+  // ─── HEADER ───
+  wsData.push(['VITALS DRUG STORE LLC']);
+  wsData.push(['STOCK QUOTATION']);
+  wsData.push([]);
+  wsData.push(['Date:', dateStr, '', 'Ref #:', refNum]);
+  wsData.push(['Valid Until:', validStr, '', 'Total Items Requested:', results.length]);
+  wsData.push(['', '', '', 'Available:', available.length, 'Substitutes Offered:', substitutes.length, 'Not Available:', notAvailable.length]);
+  wsData.push([]);
+
+  // ─── SECTION 1: AVAILABLE ───
+  wsData.push(['SECTION 1 — AVAILABLE ITEMS (' + available.length + ')']);
+  if (available.length > 0) {
+    wsData.push(['#', 'Medicine Name', 'Pack Size / Form', 'Unit Price (AED)', 'Qty Available', 'Expiry Date', 'Bonus / Offer']);
+    var totalVal = 0;
+    available.forEach(function(r, i) {
+      var m = r.matched;
+      var d = getItemDetails(m);
+      wsData.push([i + 1, d.name, d.pack, d.price, d.qty, d.expiry, d.bonus]);
+      if (d.price && !isNaN(d.price)) totalVal += d.price;
+    });
+    wsData.push([]);
+    wsData.push(['', '', '', 'Subtotal (unit prices):', 'AED ' + totalVal.toFixed(2)]);
+  } else {
+    wsData.push(['No items available from the requested list.']);
+  }
+  wsData.push([]);
+
+  // ─── SECTION 2: SUBSTITUTES OFFERED ───
+  wsData.push(['SECTION 2 — SUBSTITUTES OFFERED (' + substitutes.length + ' items)']);
+  if (substitutes.length > 0) {
+    wsData.push(['#', 'Originally Requested', 'Suggested Alternative', 'Salt / INN', 'Pack Size / Form', 'Unit Price (AED)', 'Qty Available', 'Expiry Date', 'Bonus / Offer']);
+    var subIdx = 0;
+    substitutes.forEach(function(s) {
+      // Show the best (first in-stock) alternative
+      var best = s.alternatives[0];
+      var d = getItemDetails(best);
+      var salt = typeof siExtractSalt === 'function' ? siExtractSalt(best.salt || '') : (best.salt || '');
+      subIdx++;
+      wsData.push([subIdx, s.original, d.name, salt, d.pack, d.price, d.qty, d.expiry, d.bonus]);
+      // If there are more alternates, show them indented
+      for (var ai = 1; ai < s.alternatives.length && ai < 3; ai++) {
+        var altItem = s.alternatives[ai];
+        var ad = getItemDetails(altItem);
+        var aSalt = typeof siExtractSalt === 'function' ? siExtractSalt(altItem.salt || '') : (altItem.salt || '');
+        wsData.push(['', '  (also available)', ad.name, aSalt, ad.pack, ad.price, ad.qty, ad.expiry, ad.bonus]);
+      }
+    });
+  } else {
+    wsData.push(['No substitutes to offer.']);
+  }
+  wsData.push([]);
+
+  // ─── SECTION 3: NOT AVAILABLE ───
+  wsData.push(['SECTION 3 — NOT AVAILABLE (' + notAvailable.length + ')']);
+  if (notAvailable.length > 0) {
+    wsData.push(['#', 'Requested Medicine']);
+    notAvailable.forEach(function(name, i) {
+      wsData.push([i + 1, name]);
+    });
+  } else {
+    wsData.push(['All requested items are available or have substitutes.']);
+  }
+  wsData.push([]);
+
+  // ─── FOOTER ───
+  var grandTotal = 0;
+  available.forEach(function(r) {
+    var p = r.matched ? (typeof priceOf === 'function' ? priceOf(r.matched) : r.price) : 0;
+    if (p && !isNaN(parseFloat(p))) grandTotal += parseFloat(p);
+  });
+  substitutes.forEach(function(s) {
+    var best = s.alternatives[0];
+    var p = typeof priceOf === 'function' ? priceOf(best) : 0;
+    if (p && !isNaN(parseFloat(p))) grandTotal += parseFloat(p);
+  });
+
+  wsData.push(['ESTIMATED TOTAL VALUE:', '', '', 'AED ' + grandTotal.toFixed(2)]);
+  wsData.push([]);
+  wsData.push(['Terms & Conditions:']);
+  wsData.push(['• Prices subject to change without prior notice.']);
+  wsData.push(['• Quotation valid for 3 days from date of issue.']);
+  wsData.push(['• VAT applicable as per UAE regulations.']);
+  wsData.push(['• Availability subject to prior sale.']);
+  wsData.push(['• Bonus/Offer column may be filled in by sales representative.']);
+
+  var ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // ─── STYLING ───
+  // Column widths
+  ws['!cols'] = [
+    { wch: 5 },   // #
+    { wch: 28 },  // Medicine / Originally Requested
+    { wch: 28 },  // Pack / Suggested Alternative
+    { wch: 22 },  // Price / Salt
+    { wch: 16 },  // Qty / Pack
+    { wch: 14 },  // Expiry / Price
+    { wch: 14 },  // Bonus / Qty
+    { wch: 14 },  // Expiry (section 2)
+    { wch: 16 },  // Bonus (section 2)
+  ];
+
+  // Merge header cells
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },  // Company name
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } },  // Title
+  ];
+
+  // Find section header rows and style them bold
+  // (SheetJS free doesn't support cell styles, but the structure is clean)
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Quotation');
+  XLSX.writeFile(wb, 'Vitals_Quotation_' + refNum + '.xlsx');
+}
 
 function siSetMode(mode) {
   _siMode = mode;
@@ -20547,6 +21872,445 @@ function fiImportCSV(){
   };
   input.click();
 }
+
+// ═══ Google Sheet Sync ═══════════════════════════════════════════════════
+// Flow: Rep fills Google Form/Sheet → Published as CSV → Dashboard fetches → Auto stock-check → WhatsApp reply
+
+function fiGSheetSettings(){
+  var url = state.fiGSheetUrl || '';
+  var autoSync = state.fiAutoSync !== false;
+  var lastSync = state.fiLastSync || 'Never';
+  var overlay = document.createElement('div');
+  overlay.id = 'fiGSheetOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:16px;padding:28px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto">'+
+    '<div style="font-size:16px;font-weight:800;color:#1B4F5C;margin-bottom:20px">📊 Google Sheet Sync Settings</div>'+
+
+    '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:14px;margin-bottom:16px">'+
+    '<div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:8px">How it works:</div>'+
+    '<div style="font-size:12px;color:#374151;line-height:1.6">'+
+    '1. Create a <b>Google Sheet</b> with columns: <code>Rep Name, Pharmacy, Medicine, Issue Type, Qty, Priority, Notes</code><br>'+
+    '2. Share the sheet link to reps via WhatsApp — they fill in requests<br>'+
+    '3. Publish the sheet: <b>File → Share → Publish to web → CSV</b><br>'+
+    '4. Paste the published CSV URL below<br>'+
+    '5. Click Sync — new rows get imported, stock-checked, and replies generated</div></div>'+
+
+    '<div style="margin-bottom:16px">'+
+    '<label style="font-size:12px;font-weight:700;color:#6B7280">PUBLISHED CSV URL</label><br>'+
+    '<input id="gs_url" type="url" value="'+esc(url)+'" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv" style="width:100%;padding:10px 12px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;margin-top:4px;box-sizing:border-box;font-family:monospace">'+
+    '<div style="font-size:11px;color:#6B7280;margin-top:4px">Paste the URL from Google Sheets → File → Share → Publish to web → CSV format</div></div>'+
+
+    '<div style="margin-bottom:16px">'+
+    '<label style="display:flex;align-items:center;gap:8px;cursor:pointer">'+
+    '<input id="gs_auto" type="checkbox" '+(autoSync?'checked':'')+' style="width:16px;height:16px;accent-color:#1B4F5C">'+
+    '<span style="font-size:13px;font-weight:600;color:#374151">Auto-sync on tab load</span></label>'+
+    '<div style="font-size:11px;color:#6B7280;margin-top:4px">When enabled, automatically fetches new entries every time you open the Field Issues tab</div></div>'+
+
+    '<div style="background:#F8FAFC;border-radius:8px;padding:12px;margin-bottom:16px">'+
+    '<div style="font-size:12px;color:#6B7280">Last synced: <b>'+(lastSync==='Never'?lastSync:new Date(lastSync).toLocaleString('en-GB'))+'</b></div>'+
+    '<div style="font-size:12px;color:#6B7280">Imported rows (total): <b>'+(state.fiGSheetImported||0)+'</b></div></div>'+
+
+    '<div style="display:flex;gap:8px;margin-bottom:16px">'+
+    '<button onclick="fiGSheetSave()" style="flex:1;padding:10px;background:#1B4F5C;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">💾 Save Settings</button>'+
+    '<button onclick="fiGSheetSync()" style="flex:1;padding:10px;background:#166534;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">🔄 Sync Now</button>'+
+    '<button onclick="document.getElementById(\'fiGSheetOverlay\').remove()" style="padding:10px 16px;background:#F3F4F6;border:none;border-radius:10px;font-size:13px;cursor:pointer">Close</button></div>'+
+
+    '<div style="border-top:1px solid #E2E8F0;padding-top:16px;margin-top:8px">'+
+    '<div style="font-size:13px;font-weight:700;color:#1B4F5C;margin-bottom:10px">📱 Share Sheet Link to Reps via WhatsApp</div>'+
+    '<div style="font-size:12px;color:#6B7280;margin-bottom:8px">Share the <b>editable</b> Google Sheet link (not the CSV) so reps can add rows:</div>'+
+    '<input id="gs_edit_url" type="url" value="'+(esc(state.fiGSheetEditUrl||''))+'" placeholder="https://docs.google.com/spreadsheets/d/.../edit" style="width:100%;padding:8px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:12px;margin-bottom:8px;box-sizing:border-box;font-family:monospace">'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap" id="gs_rep_btns"></div></div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  fiGSheetRepButtons();
+}
+
+function fiGSheetRepButtons(){
+  var el = document.getElementById('gs_rep_btns');
+  if(!el) return;
+  var editUrl = document.getElementById('gs_edit_url');
+  var link = editUrl ? editUrl.value.trim() : (state.fiGSheetEditUrl||'');
+  var reps = (typeof FI_REPS !== 'undefined') ? FI_REPS : [];
+  var contacts = state.repContacts || {};
+  var btns = '';
+  reps.forEach(function(rep){
+    var phone = contacts[rep] || '';
+    if(!phone) {
+      btns += '<button disabled style="padding:6px 12px;background:#F3F4F6;border:1px solid #E2E8F0;border-radius:8px;font-size:11px;color:#9CA3AF;cursor:not-allowed" title="No phone for '+esc(rep)+'">'+esc(rep)+' (no phone)</button>';
+      return;
+    }
+    var msg = '📊 Vitals Drug Store — Medicine Request Sheet\n\nHi '+rep+',\n\nPlease use this Google Sheet to submit your medicine requests (out of stock, bonus issues, enquiries, etc.):\n\n'+link+'\n\nFill in one row per request. We check it daily and will WhatsApp you back with stock status.\n\n— Vitals Team';
+    btns += '<button onclick="window.open(fiWhatsappUrl(\''+esc(phone)+'\',\''+esc(msg.replace(/'/g,"\\'"))+'\'))" style="padding:6px 12px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">📱 '+esc(rep)+'</button>';
+  });
+  if(!reps.length) btns = '<span style="font-size:12px;color:#6B7280">No reps configured — add reps in ⚙ Rep Settings first</span>';
+  if(!link) btns = '<span style="font-size:12px;color:#B71C1C">Enter the editable Sheet URL above first</span>';
+  el.innerHTML = btns;
+}
+
+function fiGSheetSave(){
+  var urlEl = document.getElementById('gs_url');
+  var autoEl = document.getElementById('gs_auto');
+  var editEl = document.getElementById('gs_edit_url');
+  state.fiGSheetUrl = urlEl ? urlEl.value.trim() : '';
+  state.fiAutoSync = autoEl ? autoEl.checked : true;
+  state.fiGSheetEditUrl = editEl ? editEl.value.trim() : '';
+  scheduleSave();
+  toast('✅ Google Sheet settings saved');
+  fiGSheetRepButtons();
+}
+
+// ─── Hardcoded defaults so URLs survive without persistent storage ───
+(function(){
+  if(!state.fiGSheetUrl) state.fiGSheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRa_qy4P3Uk_Fl5tSK6-o1-DzBrab2nU7eAg0jP2pIxtQZ6D3B4ZuXilyDn_mvjRrPiF0MVnr5v6Dsu/pub?gid=89470607&single=true&output=csv';
+  if(!state.fiGSheetEditUrl) state.fiGSheetEditUrl = 'https://docs.google.com/spreadsheets/d/1ynKiCUdt-IopyICQZhJNI8CH8kVnUIXEzusjpPkaHm4/edit?usp=sharing';
+  if(state.fiAutoSync === undefined) state.fiAutoSync = false;
+})();
+
+function fiGSheetSync(){
+  var url = state.fiGSheetUrl;
+  if(!url){ toast('⚠ Set the published CSV URL first'); return; }
+  // Ensure it ends with output=csv
+  if(url.indexOf('output=csv') < 0){
+    if(url.indexOf('?') >= 0) url += '&output=csv';
+    else url += '?output=csv';
+  }
+  toast('🔄 Fetching Google Sheet...');
+
+  // Try direct fetch first, fall back to CORS proxy if blocked (local file)
+  fetch(url)
+    .then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.text();
+    })
+    .then(function(csvText){
+      fiProcessGSheetCSV(csvText);
+    })
+    .catch(function(err){
+      console.warn('Direct fetch failed, trying CORS proxies...', err.message);
+      var proxies = [
+        'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+        'https://corsproxy.io/?' + encodeURIComponent(url),
+        'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url)
+      ];
+      function tryProxy(i){
+        if(i >= proxies.length){
+          toast('❌ Sync failed: All proxies blocked.\nTry: Open dashboard in a local web server or use File Import instead.');
+          return;
+        }
+        return fetch(proxies[i])
+          .then(function(r){
+            if(!r.ok) throw new Error('HTTP '+r.status);
+            return r.text();
+          })
+          .then(function(csvText){
+            fiProcessGSheetCSV(csvText);
+          })
+          .catch(function(err2){
+            console.warn('Proxy '+i+' failed:', err2.message);
+            return tryProxy(i+1);
+          });
+      }
+      return tryProxy(0);
+    });
+}
+
+function fiProcessGSheetCSV(csvText){
+  // Parse CSV
+  var rows = fiParseCSV(csvText);
+  if(!rows || rows.length < 2){ toast('No data rows in sheet'); return; }
+
+  var headers = rows[0].map(function(h){ return (h||'').trim().toLowerCase(); });
+  var dataRows = rows.slice(1);
+
+  // Column mapping (flexible)
+  function colIdx(names){
+    for(var i=0;i<names.length;i++){
+      var idx = headers.indexOf(names[i].toLowerCase());
+      if(idx >= 0) return idx;
+    }
+    return -1;
+  }
+  var cRep = colIdx(['rep name','rep','name','your name','your_name','sales rep']);
+  var cPharmacy = colIdx(['pharmacy','store','customer','pharmacy name','outlet']);
+  var cMedicine = colIdx(['medicine','medicine name','product','item','drug','product name']);
+  var cType = colIdx(['issue type','type','category','request type','issue']);
+  var cQty = colIdx(['qty','quantity','units','amount']);
+  var cPriority = colIdx(['priority','urgency']);
+  var cNotes = colIdx(['notes','description','details','message','comments']);
+  var cTimestamp = colIdx(['timestamp','date','submitted','time','created']);
+
+  // Dedup: track already-imported rows by a hash of key fields
+  if(!state.fiGSheetHashes) state.fiGSheetHashes = [];
+  var existingHashes = state.fiGSheetHashes;
+
+  var imported = 0, skipped = 0, dupes = 0;
+  var newIssues = [];
+
+  var typeMap = {
+    'out of stock':'oos','oos':'oos','stock out':'oos','not available':'oos','need stock':'oos',
+    'short expiry':'expiry','expiry':'expiry','near expiry':'expiry',
+    'declining':'declining','slow':'declining','slow moving':'declining',
+    'dead stock':'dead','dead':'dead',
+    'bonus':'bonus','bonus issue':'bonus','bonus shortfall':'bonus',
+    'price':'price','price issue':'price','pricing':'price','price complaint':'price',
+    'delivery':'delivery','delivery issue':'delivery',
+    'complaint':'complaint','customer complaint':'complaint','product complaint':'complaint',
+    'credit':'credit','credit note':'credit','credit/payment':'credit',
+    'medicine enquiry':'enquiry','enquiry':'enquiry','new product':'enquiry',
+    'request':'enquiry','new medicine':'enquiry','need medicine':'enquiry'
+  };
+
+  dataRows.forEach(function(cols){
+    var rep = cRep >= 0 ? (cols[cRep]||'').trim() : '';
+    var pharmacy = cPharmacy >= 0 ? (cols[cPharmacy]||'').trim() : '';
+    var medicine = cMedicine >= 0 ? (cols[cMedicine]||'').trim() : '';
+    var issueType = cType >= 0 ? (cols[cType]||'').trim() : '';
+    var qty = cQty >= 0 ? (cols[cQty]||'').trim() : '';
+    var priority = cPriority >= 0 ? (cols[cPriority]||'').trim() : '';
+    var notes = cNotes >= 0 ? (cols[cNotes]||'').trim() : '';
+    var timestamp = cTimestamp >= 0 ? (cols[cTimestamp]||'').trim() : '';
+
+    if(!medicine && !notes && !issueType){ skipped++; return; }
+
+    // Dedup hash
+    var hash = (rep+'|'+pharmacy+'|'+medicine+'|'+issueType+'|'+timestamp).toLowerCase();
+    if(existingHashes.indexOf(hash) >= 0){ dupes++; return; }
+    existingHashes.push(hash);
+
+    var mappedType = typeMap[(issueType||'').toLowerCase()] || 'enquiry';
+    var typeObj = (typeof FI_TYPES!=='undefined') ? FI_TYPES.find(function(t){return t.id===mappedType;}) : null;
+
+    var issue = {
+      id: fiGenId(mappedType),
+      type: mappedType,
+      typeLabel: typeObj ? typeObj.label : (issueType || 'Enquiry'),
+      icon: typeObj ? typeObj.icon : '🔍',
+      rep: rep,
+      pharmacy: pharmacy,
+      medicine: medicine,
+      description: notes || (issueType + ' — ' + medicine),
+      qty: Number(qty) || 0,
+      priority: priority.toLowerCase() === 'high' || priority.toLowerCase() === 'urgent' ? 'high' : priority.toLowerCase() === 'low' ? 'low' : 'normal',
+      assignedTo: '',
+      status: 'new',
+      auto: false,
+      createdAt: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString(),
+      source: 'gsheet',
+      history: [{date: new Date().toISOString(), note: 'Imported from Google Sheet — Rep ' + rep + ' at ' + pharmacy}]
+    };
+
+    // ── Auto stock-check ──
+    var check = fiCheckDDC(medicine);
+    if(check.inSystem){
+      issue.stockCheck = 'in_stock';
+      issue.stockQty = check.stock;
+      issue.stockPrice = check.price;
+      issue.stockStatus = check.status;
+      issue.autoReply = fiGSheetReply(issue, 'in_stock', check);
+    } else if(check.ddcFound && check.alternatives && check.alternatives.length){
+      issue.stockCheck = 'alternative';
+      issue.alternative = check.alternatives[0].name;
+      issue.ddcPrice = check.ddcPrice;
+      issue.autoReply = fiGSheetReply(issue, 'alternative', check);
+    } else if(check.ddcFound){
+      issue.stockCheck = 'oos_ddc';
+      issue.ddcPrice = check.ddcPrice;
+      issue.ddcSalt = check.ddcSalt;
+      issue.autoReply = fiGSheetReply(issue, 'oos_ddc', check);
+    } else {
+      issue.stockCheck = 'not_found';
+      issue.autoReply = fiGSheetReply(issue, 'not_found', check);
+    }
+
+    if(!state.fieldIssues) state.fieldIssues = [];
+    state.fieldIssues.push(issue);
+    newIssues.push(issue);
+    imported++;
+  });
+
+  state.fiGSheetHashes = existingHashes;
+  state.fiLastSync = new Date().toISOString();
+  state.fiGSheetImported = (state.fiGSheetImported || 0) + imported;
+  scheduleSave();
+
+  if(imported > 0){
+    alLog('gsheet_sync', 'Synced '+imported+' new issues from Google Sheet', dupes+' duplicates skipped, '+skipped+' empty rows');
+    toast('✅ Synced '+imported+' new issues'+(dupes?' ('+dupes+' duplicates skipped)':''));
+    // Show reply summary
+    fiGSheetReviewReplies(newIssues);
+  } else {
+    toast('No new rows — '+dupes+' already imported, '+skipped+' empty');
+  }
+  renderFieldIssuesTab();
+}
+
+function fiGSheetReply(issue, status, check){
+  var med = issue.medicine || 'the requested medicine';
+  var rep = issue.rep || 'Team';
+  var pharm = issue.pharmacy || '';
+  if(status === 'in_stock'){
+    return '✅ In Stock — Vitals Drug Store\n\nHi '+rep+',\n\n'+med+(pharm?' (requested by '+pharm+')':'')+' is available in our stock.\n\nCurrent stock: '+check.stock+' units\nStatus: '+check.status+'\n\nYou can process orders now.\n\n— Vitals Team';
+  } else if(status === 'alternative'){
+    return '💊 Alternative Available — Vitals Drug Store\n\nHi '+rep+',\n\n'+med+(pharm?' (requested by '+pharm+')':'')+' is not in our current stock, but we have an alternative:\n\n✅ '+check.alternatives[0].name+'\n\nPlease offer this alternative to the pharmacy.\n\n— Vitals Team';
+  } else if(status === 'oos_ddc'){
+    return '📋 Sourcing — Vitals Drug Store\n\nHi '+rep+',\n\n'+med+(pharm?' (requested by '+pharm+')':'')+' is DHA registered but not in our stock yet.\n\nReg. price: AED '+(check.ddcPrice||'?')+'\nWe are checking sourcing options and will update you.\n\n— Vitals Team';
+  } else {
+    return '⚠ Not Found — Vitals Drug Store\n\nHi '+rep+',\n\n'+med+(pharm?' (requested by '+pharm+')':'')+' — we could not find this in our system or the DHA registry.\n\nPlease double-check the medicine name and resubmit, or contact us for help.\n\n— Vitals Team';
+  }
+}
+
+function fiGSheetReviewReplies(issues){
+  if(!issues.length) return;
+  var overlay = document.createElement('div');
+  overlay.id = 'fiReplyOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center';
+
+  var statusColors = {
+    in_stock: {bg:'#F0FDF4',border:'#BBF7D0',label:'✅ IN STOCK',color:'#166534'},
+    alternative: {bg:'#EFF6FF',border:'#BFDBFE',label:'💊 ALTERNATIVE',color:'#1D4ED8'},
+    oos_ddc: {bg:'#FFFBEB',border:'#FDE68A',label:'📋 SOURCING',color:'#92400E'},
+    not_found: {bg:'#FFF5F5',border:'#FECACA',label:'⚠ NOT FOUND',color:'#B71C1C'}
+  };
+
+  var rows = '';
+  issues.forEach(function(issue, idx){
+    var sc = statusColors[issue.stockCheck] || statusColors.not_found;
+    var phone = fiRepPhone(issue.rep);
+    rows += '<div style="background:'+sc.bg+';border:1px solid '+sc.border+';border-radius:10px;padding:12px;margin-bottom:8px">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+      '<span style="padding:2px 8px;background:'+sc.color+';color:#fff;border-radius:6px;font-size:10px;font-weight:700">'+sc.label+'</span>'+
+      '<span style="font-weight:700;font-size:13px;color:#1F2937">'+esc(issue.medicine)+'</span></div>'+
+      '<span style="font-size:11px;color:#6B7280">'+esc(issue.rep)+' · '+esc(issue.pharmacy)+'</span></div>'+
+      '<div style="font-size:11px;color:#374151;background:#fff;border-radius:6px;padding:8px;white-space:pre-wrap;max-height:80px;overflow-y:auto;margin-bottom:8px;border:1px solid '+sc.border+'">'+esc(issue.autoReply)+'</div>'+
+      '<div style="display:flex;gap:6px">'+
+      (phone ?
+        '<button onclick="window.open(fiWhatsappUrl(\''+esc(phone)+'\',document.getElementById(\'gs_reply_'+idx+'\')?.textContent||\'\')" style="padding:5px 12px;background:#25D366;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">📱 WhatsApp '+esc(issue.rep)+'</button>' :
+        '<span style="font-size:11px;color:#9CA3AF;padding:5px 0">No phone for '+esc(issue.rep)+' — set in Rep Settings</span>')+
+      '<button onclick="fiCopyText(\'gs_reply_'+idx+'\',this)" style="padding:5px 12px;background:#F3F4F6;border:none;border-radius:6px;font-size:11px;cursor:pointer">📋 Copy</button>'+
+      '</div>'+
+      '<div id="gs_reply_'+idx+'" style="display:none">'+esc(issue.autoReply)+'</div>'+
+      '</div>';
+  });
+
+  var stats = {in_stock:0, alternative:0, oos_ddc:0, not_found:0};
+  issues.forEach(function(i){ stats[i.stockCheck] = (stats[i.stockCheck]||0)+1; });
+
+  overlay.innerHTML = '<div style="background:#fff;border-radius:16px;padding:28px;width:640px;max-width:95vw;max-height:90vh;overflow-y:auto">'+
+    '<div style="font-size:16px;font-weight:800;color:#1B4F5C;margin-bottom:4px">📊 Sync Complete — '+issues.length+' New Requests</div>'+
+    '<div style="font-size:12px;color:#6B7280;margin-bottom:16px">Stock-check results and auto-generated replies for each request</div>'+
+
+    '<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">'+
+    (stats.in_stock?'<span style="padding:4px 10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;font-size:12px;font-weight:600;color:#166534">✅ '+stats.in_stock+' In Stock</span>':'')+
+    (stats.alternative?'<span style="padding:4px 10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;font-size:12px;font-weight:600;color:#1D4ED8">💊 '+stats.alternative+' Alternatives</span>':'')+
+    (stats.oos_ddc?'<span style="padding:4px 10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;font-size:12px;font-weight:600;color:#92400E">📋 '+stats.oos_ddc+' Sourcing</span>':'')+
+    (stats.not_found?'<span style="padding:4px 10px;background:#FFF5F5;border:1px solid #FECACA;border-radius:8px;font-size:12px;font-weight:600;color:#B71C1C">⚠ '+stats.not_found+' Not Found</span>':'')+
+    '</div>'+
+
+    rows+
+
+    '<div style="display:flex;gap:8px;margin-top:16px;border-top:1px solid #E2E8F0;padding-top:16px">'+
+    '<button onclick="fiGSheetBulkWA()" style="flex:1;padding:10px;background:#25D366;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">📱 Open WhatsApp for All Reps</button>'+
+    '<button onclick="document.getElementById(\'fiReplyOverlay\').remove()" style="padding:10px 20px;background:#F3F4F6;border:none;border-radius:10px;font-size:13px;cursor:pointer">Close</button></div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function fiCopyText(elId, btn){
+  var el = document.getElementById(elId);
+  if(!el) return;
+  var text = el.textContent;
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(function(){ btn.textContent='✅ Copied'; setTimeout(function(){btn.textContent='📋 Copy';},1500); });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); btn.textContent='✅ Copied'; setTimeout(function(){btn.textContent='📋 Copy';},1500);
+  }
+}
+
+function fiGSheetBulkWA(){
+  // Group recent gsheet issues by rep, send one combined message per rep
+  var recent = (state.fieldIssues||[]).filter(function(i){
+    return i.source==='gsheet' && i.stockCheck && !i.waReplySent;
+  });
+  if(!recent.length){ toast('No pending replies'); return; }
+
+  var byRep = {};
+  recent.forEach(function(i){
+    if(!i.rep) return;
+    if(!byRep[i.rep]) byRep[i.rep] = [];
+    byRep[i.rep].push(i);
+  });
+
+  var repNames = Object.keys(byRep);
+  var opened = 0;
+  repNames.forEach(function(rep){
+    var phone = fiRepPhone(rep);
+    if(!phone) return;
+    var issues = byRep[rep];
+    var msg = '📊 Stock Check Results — Vitals Drug Store\n\nHi '+rep+',\n\nHere are the results for your recent requests:\n\n';
+    issues.forEach(function(iss, idx){
+      var status = iss.stockCheck==='in_stock'?'✅ In Stock ('+iss.stockQty+' units)':
+                   iss.stockCheck==='alternative'?'💊 Alternative: '+iss.alternative:
+                   iss.stockCheck==='oos_ddc'?'📋 Sourcing (DHA registered)':
+                   '⚠ Not found';
+      msg += (idx+1)+'. '+iss.medicine+' → '+status+'\n';
+    });
+    msg += '\n— Vitals Team';
+    window.open(fiWhatsappUrl(phone, msg));
+    issues.forEach(function(i){ i.waReplySent = true; });
+    opened++;
+  });
+  scheduleSave();
+  toast('Opened WhatsApp for '+opened+' reps'+(repNames.length-opened?' ('+String(repNames.length-opened)+' missing phone numbers)':''));
+}
+
+// Simple CSV parser (handles quoted fields)
+function fiParseCSV(text){
+  var rows = []; var row = []; var field = ''; var inQuote = false;
+  for(var i=0;i<text.length;i++){
+    var c = text[i];
+    if(inQuote){
+      if(c==='"' && text[i+1]==='"'){ field+='"'; i++; }
+      else if(c==='"'){ inQuote=false; }
+      else { field+=c; }
+    } else {
+      if(c==='"'){ inQuote=true; }
+      else if(c===','){ row.push(field); field=''; }
+      else if(c==='\n' || (c==='\r' && text[i+1]==='\n')){ if(c==='\r') i++; row.push(field); field=''; if(row.length>1 || row[0]!=='') rows.push(row); row=[]; }
+      else if(c==='\r'){ row.push(field); field=''; if(row.length>1 || row[0]!=='') rows.push(row); row=[]; }
+      else { field+=c; }
+    }
+  }
+  row.push(field);
+  if(row.length>1 || row[0]!=='') rows.push(row);
+  return rows;
+}
+
+// Auto-sync on tab load (called from renderFieldIssuesTab)
+function fiAutoSyncCheck(){
+  try {
+    if(!state.fiGSheetUrl || state.fiAutoSync === false) return;
+    var last = state.fiLastSync ? new Date(state.fiLastSync).getTime() : 0;
+    var now = Date.now();
+    // Only auto-sync once per hour to avoid hammering
+    if(now - last < 3600000) return;
+    fiGSheetSync();
+  } catch(e){ console.warn('Auto-sync check failed:', e); }
+}
+function fiSendAutoReply(issueId, btn){
+  var issue = fiList().find(function(i){return i.id===issueId;});
+  if(!issue || !issue.autoReply){ toast('No auto-reply for this issue'); return; }
+  var phone = fiRepPhone(issue.rep);
+  if(!phone){ toast('No phone number for '+issue.rep+' — set in Rep Settings'); return; }
+  window.open(fiWhatsappUrl(phone, issue.autoReply));
+  issue.waReplySent = true;
+  scheduleSave();
+  if(btn) { btn.textContent = '✅ Opened'; btn.disabled = true; }
+}
+
+
 
 
 </script>
