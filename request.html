@@ -1,0 +1,679 @@
+<!--
+  ╔══════════════════════════════════════════════════════╗
+  ║  VITALS — Rep Medicine Request Form                  ║
+  ║  Upload this file to your GitHub repo as:            ║
+  ║  request.html  (alongside index.html)                ║
+  ║                                                      ║
+  ║  SETUP (one time):                                   ║
+  ║  1. Deploy submit_gsheet.gs as a Google Apps Script  ║
+  ║  2. Paste the Web App URL below as SUBMIT_URL        ║
+  ║  3. Upload this file to GitHub                       ║
+  ║  4. Share the link with reps:                        ║
+  ║     annpurnasinghal.github.io/vitals-dashboard/      ║
+  ║     request.html                                     ║
+  ╚══════════════════════════════════════════════════════╝
+-->
+<title>Medicine Request — Vitals</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --bg: #eef2f4;
+  --panel: #ffffff;
+  --ink: #14232b;
+  --muted: #5c6d76;
+  --faint: #94a3b0;
+  --line: #dfe6ea;
+  --brand: #1B4F5C;
+  --brand-dk: #143d48;
+  --accent: #0c9b8c;
+  --accent-lt: #e3f7f5;
+  --ok: #166534;
+  --ok-bg: #f0fdf4;
+  --warn-bg: #fffbeb;
+  --warn: #b45309;
+  --err: #b91c1c;
+  --err-bg: #fee2e2;
+  --r: 14px;
+  --r-sm: 9px;
+  --shadow: 0 1px 3px rgba(20,35,43,.07),0 2px 10px rgba(20,35,43,.05);
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1c21;--panel:#172630;--ink:#e4eff2;--muted:#8aabb5;
+  --faint:#4a6872;--line:#243642;--accent:#0fbfad;--accent-lt:#0fbfad18;
+}}
+:root[data-theme="dark"]{
+  --bg:#0e1c21;--panel:#172630;--ink:#e4eff2;--muted:#8aabb5;
+  --faint:#4a6872;--line:#243642;--accent:#0fbfad;--accent-lt:#0fbfad18;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:var(--bg);font-family:'Inter',system-ui,sans-serif;
+  font-size:14px;color:var(--ink);min-height:100%;
+  padding-inline:16px;padding-block:0 40px;
+}
+/* ── Header ── */
+.app-header{
+  background:linear-gradient(155deg,#1B4F5C 0%,#0d3540 100%);
+  margin-inline:-16px;padding:16px 22px 14px;
+  position:sticky;top:env(safe-area-inset-top,0px);z-index:30;
+  border-radius:0 0 22px 22px;
+  box-shadow:0 4px 24px rgba(0,0,0,.25);
+  margin-bottom:20px;
+}
+.hd-row{display:flex;align-items:center;gap:11px;}
+.hd-icon{width:36px;height:36px;background:rgba(255,255,255,.13);border-radius:10px;
+  display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.hd-title{font-size:17px;font-weight:700;color:#fff;letter-spacing:.04em;}
+.hd-sub{font-size:11px;color:rgba(255,255,255,.5);margin-top:2px;}
+.hd-progress{margin-top:12px;height:3px;background:rgba(255,255,255,.15);border-radius:3px;overflow:hidden;}
+.hd-bar{height:100%;width:0%;background:#0fbfad;border-radius:3px;transition:width .35s ease;}
+/* ── Section label ── */
+.slabel{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--faint);margin:20px 0 8px;}
+/* ── Card ── */
+.card{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);
+  overflow:hidden;margin-bottom:10px;}
+/* ── Field row ── */
+.frow{display:flex;align-items:center;gap:12px;padding:13px 16px;
+  border-bottom:1px solid var(--line);min-height:56px;cursor:pointer;
+  transition:background .12s;-webkit-tap-highlight-color:transparent;}
+.frow:last-child{border-bottom:none;}
+.frow:active{background:var(--bg);}
+.frow.active-field{border-bottom-color:var(--accent);background:var(--accent-lt);}
+.fi{font-size:17px;width:22px;text-align:center;flex-shrink:0;}
+.fc{flex:1;min-width:0;}
+.flabel{font-size:10.5px;color:var(--muted);font-weight:500;margin-bottom:2px;}
+.fval{font-size:14px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fval.ph{color:var(--faint);font-weight:400;}
+.fbadge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;
+  background:var(--ok-bg);color:var(--ok);flex-shrink:0;}
+.fchev{color:var(--faint);font-size:14px;flex-shrink:0;}
+/* ── Select overlay ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;
+  display:flex;align-items:flex-end;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .2s;}
+.overlay.show{opacity:1;pointer-events:all;}
+.sheet{background:var(--panel);width:100%;max-width:480px;border-radius:22px 22px 0 0;
+  max-height:70vh;overflow:hidden;display:flex;flex-direction:column;
+  transform:translateY(100%);transition:transform .25s ease;}
+.overlay.show .sheet{transform:translateY(0);}
+.sheet-head{padding:14px 18px 10px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;}
+.sheet-title{font-size:15px;font-weight:700;}
+.sheet-close{background:var(--bg);border:none;border-radius:8px;padding:5px 10px;
+  font-size:12px;color:var(--muted);cursor:pointer;font-family:inherit;}
+.sheet-search{padding:10px 16px;border-bottom:1px solid var(--line);}
+.sheet-search input{width:100%;border:1.5px solid var(--line);border-radius:9px;
+  padding:9px 12px;font-family:inherit;font-size:13px;color:var(--ink);
+  background:var(--bg);outline:none;}
+.sheet-search input:focus{border-color:var(--accent);}
+.sheet-list{overflow-y:auto;flex:1;}
+.opt{padding:13px 18px;border-bottom:1px solid var(--line);cursor:pointer;
+  font-size:13px;font-weight:500;display:flex;align-items:center;gap:10px;
+  transition:background .1s;}
+.opt:last-child{border-bottom:none;}
+.opt:active{background:var(--accent-lt);}
+.opt .opt-sub{font-size:11px;color:var(--muted);font-weight:400;margin-top:1px;}
+.stock-pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;
+  margin-left:auto;flex-shrink:0;}
+.stock-pill.oos{background:var(--err-bg);color:var(--err);}
+.stock-pill.low{background:var(--warn-bg);color:var(--warn);}
+.stock-pill.ok{background:var(--ok-bg);color:var(--ok);}
+/* ── Chips ── */
+.chips-wrap{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);
+  padding:14px 16px;margin-bottom:10px;}
+.chips-lbl{font-size:10.5px;color:var(--muted);font-weight:600;margin-bottom:10px;
+  text-transform:uppercase;letter-spacing:.06em;}
+.chips{display:flex;flex-wrap:wrap;gap:7px;}
+.chip{padding:8px 13px;border-radius:20px;border:1.5px solid var(--line);
+  background:var(--bg);font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;
+  transition:all .15s;-webkit-tap-highlight-color:transparent;}
+.chip.sel{background:var(--accent-lt);border-color:var(--accent);color:var(--accent);font-weight:600;}
+/* ── Priority ── */
+.pri-row{display:flex;gap:8px;margin-bottom:10px;}
+.pri-btn{flex:1;padding:12px 6px;border-radius:var(--r-sm);border:1.5px solid var(--line);
+  background:var(--panel);text-align:center;font-size:12px;font-weight:600;
+  cursor:pointer;transition:all .15s;color:var(--muted);box-shadow:var(--shadow);
+  -webkit-tap-highlight-color:transparent;}
+.pri-btn .pi{font-size:18px;display:block;margin-bottom:4px;}
+.pri-btn.high.sel{background:var(--err-bg);border-color:#fca5a5;color:var(--err);}
+.pri-btn.medium.sel{background:var(--warn-bg);border-color:#fcd34d;color:var(--warn);}
+.pri-btn.low.sel{background:var(--ok-bg);border-color:#86efac;color:var(--ok);}
+/* ── Qty ── */
+.qty-row{display:flex;align-items:center;gap:12px;padding:12px 16px;}
+.qty-lbl{flex:1;font-size:13px;font-weight:500;}
+.qty-ctrl{display:flex;align-items:center;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;}
+.qbtn{width:40px;height:40px;border:none;background:var(--bg);font-size:20px;
+  color:var(--accent);cursor:pointer;font-weight:700;display:flex;align-items:center;
+  justify-content:center;transition:background .1s;font-family:inherit;}
+.qbtn:active{background:var(--line);}
+.qval{width:48px;text-align:center;font-size:16px;font-weight:700;color:var(--ink);
+  border-left:1px solid var(--line);border-right:1px solid var(--line);
+  height:40px;line-height:40px;}
+/* ── Notes ── */
+.notes-card{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);
+  padding:14px 16px;margin-bottom:10px;}
+.notes-lbl{font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;
+  letter-spacing:.06em;margin-bottom:8px;}
+.notes-ta{width:100%;min-height:70px;border:none;background:transparent;
+  font-family:inherit;font-size:13px;color:var(--ink);resize:none;outline:none;line-height:1.55;}
+.notes-ta::placeholder{color:var(--faint);}
+/* ── Submit ── */
+.submit-btn{width:100%;padding:16px;border-radius:var(--r);border:none;
+  background:linear-gradient(135deg,#1B4F5C,#0e8a7a);color:#fff;
+  font-family:inherit;font-size:15px;font-weight:700;letter-spacing:.02em;cursor:pointer;
+  box-shadow:0 4px 18px rgba(12,155,140,.28);transition:all .2s;margin-top:6px;
+  display:flex;align-items:center;justify-content:center;gap:8px;}
+.submit-btn:active{transform:scale(.98);}
+.submit-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+/* ── Success screen ── */
+.success-screen{display:none;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;padding:40px 20px;min-height:60vh;}
+.success-icon{font-size:64px;margin-bottom:20px;animation:pop .4s ease;}
+.success-title{font-size:22px;font-weight:700;margin-bottom:10px;}
+.success-sub{font-size:14px;color:var(--muted);max-width:300px;line-height:1.6;}
+.again-btn{margin-top:28px;padding:13px 28px;border-radius:var(--r);border:none;
+  background:var(--accent-lt);color:var(--accent);font-family:inherit;font-size:14px;
+  font-weight:600;cursor:pointer;}
+/* ── Alert banner ── */
+.alert-banner{display:none;padding:10px 14px;border-radius:var(--r-sm);font-size:12px;
+  margin-bottom:10px;align-items:center;gap:8px;}
+.alert-banner.oos{background:var(--err-bg);color:var(--err);display:flex;}
+.alert-banner.low{background:var(--warn-bg);color:var(--warn);display:flex;}
+/* ── Loading ── */
+.loading{display:flex;flex-direction:column;align-items:center;padding:40px;
+  color:var(--muted);gap:12px;font-size:13px;}
+.spinner{width:28px;height:28px;border:3px solid var(--line);
+  border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pop{0%{transform:scale(0.5);opacity:0}80%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+</style>
+
+<!-- ════════════════ CONFIGURATION ════════════════ -->
+<script>
+// ⬇ Paste your Google Apps Script Web App URL here after deploying submit_gsheet.gs
+var SUBMIT_URL = 'https://script.google.com/macros/s/AKfycbyqvYbm5qT4LjdbujMU2JOj5yDkB9BrAo3qlr0_UBqEhdtjB3IzB6RVaWEW8fK654BH/exec';
+
+// ⬇ These must match the published CSV URL set up in your dashboard's Google Sheet settings
+// (No change needed — the dashboard reads the same sheet this form writes to)
+
+var REPS = [
+  'Abhilash','Anwar','Jaseer','Liaquat','Mohammad',
+  'Muhammed Fayez','Pradeep','Ravi','Shakeeb',
+  'Shany Joseph','Sharafudheen','Other'
+];
+var EMIRATES = [
+  'Abu Dhabi','Dubai','Sharjah','Ajman',
+  'Umm Al Quwain','Ras Al Khaimah','Fujairah','Al Ain'
+];
+var ISSUE_TYPES = [
+  {emoji:'📦',label:'Out of Stock'},
+  {emoji:'📉',label:'Low Stock'},
+  {emoji:'🚚',label:'Delivery Issue'},
+  {emoji:'🎁',label:'Bonus Request'},
+  {emoji:'💰',label:'Price Complaint'},
+  {emoji:'🔄',label:'Substitute Request'},
+  {emoji:'⏰',label:'Short Expiry'},
+  {emoji:'📋',label:'Medicine Enquiry'},
+  {emoji:'🆕',label:'New Product'},
+  {emoji:'💳',label:'Credit / Payment'},
+  {emoji:'📦',label:'Dead Stock'},
+  {emoji:'❓',label:'Other'}
+];
+</script>
+<!-- ════════════════════════════════════════════════ -->
+
+<!-- Header -->
+<div class="app-header">
+  <div class="hd-row">
+    <div class="hd-icon">💊</div>
+    <div>
+      <div class="hd-title">VITALS</div>
+      <div class="hd-sub">Medicine Request Form</div>
+    </div>
+  </div>
+  <div class="hd-progress"><div class="hd-bar" id="progBar"></div></div>
+</div>
+
+<!-- Loading state -->
+<div class="loading" id="loadingState">
+  <div class="spinner"></div>
+  <span>Loading medicine list…</span>
+</div>
+
+<!-- Main form -->
+<div id="mainForm" style="display:none">
+
+  <!-- WHO & WHERE -->
+  <div class="slabel">Who &amp; Where</div>
+  <div class="card">
+    <div class="frow" id="repRow" onclick="openSheet('rep')">
+      <div class="fi">👤</div>
+      <div class="fc">
+        <div class="flabel">Rep Name *</div>
+        <div class="fval ph" id="repVal">Select your name…</div>
+      </div>
+      <div class="fchev">›</div>
+    </div>
+    <div class="frow" id="emirateRow" onclick="openSheet('emirate')">
+      <div class="fi">📍</div>
+      <div class="fc">
+        <div class="flabel">Emirate *</div>
+        <div class="fval ph" id="emirateVal">Select emirate…</div>
+      </div>
+      <div class="fchev">›</div>
+    </div>
+    <div class="frow" id="pharmacyRow" onclick="openSheet('pharmacy')">
+      <div class="fi">🏥</div>
+      <div class="fc">
+        <div class="flabel">Pharmacy Name *</div>
+        <div class="fval ph" id="pharmacyVal">Search pharmacy…</div>
+      </div>
+      <div class="fchev">›</div>
+    </div>
+  </div>
+
+  <!-- MEDICINE -->
+  <div class="slabel">Medicine</div>
+  <div id="medAlert" class="alert-banner"></div>
+  <div class="card">
+    <div class="frow" id="medRow" onclick="openSheet('medicine')">
+      <div class="fi">💊</div>
+      <div class="fc">
+        <div class="flabel">Medicine Name *</div>
+        <div class="fval ph" id="medVal">Search from 1,992 medicines…</div>
+      </div>
+      <div class="fchev">›</div>
+    </div>
+    <div class="qty-row">
+      <div class="qty-lbl">Quantity Required *</div>
+      <div class="qty-ctrl">
+        <button class="qbtn" onclick="chgQty(-1)">−</button>
+        <div class="qval" id="qtyVal">1</div>
+        <button class="qbtn" onclick="chgQty(1)">+</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ISSUE TYPE -->
+  <div class="slabel">Issue Type</div>
+  <div class="chips-wrap">
+    <div class="chips-lbl">What's the issue? *</div>
+    <div class="chips" id="chipsContainer"></div>
+  </div>
+
+  <!-- PRIORITY -->
+  <div class="slabel">Priority</div>
+  <div class="pri-row">
+    <div class="pri-btn high" onclick="selPri(this,'high')"><span class="pi">🔴</span>High</div>
+    <div class="pri-btn medium sel" onclick="selPri(this,'medium')"><span class="pi">🟡</span>Medium</div>
+    <div class="pri-btn low" onclick="selPri(this,'low')"><span class="pi">🟢</span>Low</div>
+  </div>
+
+  <!-- NOTES -->
+  <div class="notes-card">
+    <div class="notes-lbl">📝 Notes</div>
+    <textarea class="notes-ta" id="notesField" placeholder="Extra details — shelf count, expiry date, customer name…" oninput="updateProg()"></textarea>
+  </div>
+
+  <!-- SUBMIT -->
+  <button class="submit-btn" id="submitBtn" onclick="submitForm()">
+    <span>📤</span> Submit Request
+  </button>
+
+</div>
+
+<!-- Success screen -->
+<div class="success-screen" id="successScreen">
+  <div class="success-icon">✅</div>
+  <div class="success-title">Request Submitted!</div>
+  <div class="success-sub">Your request has been logged. The team will review it and get back to you shortly.</div>
+  <button class="again-btn" onclick="resetForm()">＋ Submit Another Request</button>
+</div>
+
+<!-- Bottom sheets for selection -->
+<div class="overlay" id="overlay" onclick="closeSheet(event)">
+  <div class="sheet" id="sheet">
+    <div class="sheet-head">
+      <div class="sheet-title" id="sheetTitle">Select</div>
+      <button class="sheet-close" onclick="closeOverlay()">Done</button>
+    </div>
+    <div class="sheet-search" id="sheetSearchWrap" style="display:none">
+      <input type="search" id="sheetSearch" placeholder="Search…" oninput="filterSheet(this.value)" autocomplete="off">
+    </div>
+    <div class="sheet-list" id="sheetList"></div>
+  </div>
+</div>
+
+<script>
+var state = {
+  rep: '', emirate: '', pharmacy: '', pharmacyOther: '',
+  medicine: '', medicineOther: '', medicineStatus: '',
+  issueType: '', priority: 'medium',
+  qty: 1, notes: ''
+};
+var medicines = [];
+var pharmacies = [];
+var currentSheet = '';
+
+/* ── Load data ── */
+function loadData() {
+  // Try loading from vitals_state.json (same repo)
+  fetch('./vitals_state.json')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      // Extract medicines
+      if (data.medicines && Array.isArray(data.medicines)) {
+        medicines = data.medicines.map(function(m){
+          return { name: m.name || m.n || '', status: m.status || m.s || 'ok',
+            supplier: m.supplier || m.sup || '' };
+        }).filter(function(m){ return m.name; });
+      }
+      // Extract pharmacies if available
+      if (data.pharmacies && Array.isArray(data.pharmacies)) {
+        pharmacies = data.pharmacies.map(function(p){ return p.name || p.n || p; }).filter(Boolean);
+      } else if (data.suppliers && Array.isArray(data.suppliers)) {
+        pharmacies = data.suppliers.map(function(s){ return s.name || s.n || s; }).filter(Boolean);
+      }
+      init();
+    })
+    .catch(function(){
+      medicines = []; pharmacies = [];
+      init();
+    });
+}
+
+function init() {
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('mainForm').style.display = 'block';
+  // Update medicine count label
+  if (medicines.length) {
+    document.querySelector('#medRow .fval').textContent = 'Search from '+medicines.length+' medicines…';
+  }
+  buildChips();
+  updateProg();
+}
+
+function buildChips() {
+  var html = '';
+  ISSUE_TYPES.forEach(function(it){
+    html += '<div class="chip" onclick="selChip(this,\''+it.label+'\')">'
+      + it.emoji + ' ' + it.label + '</div>';
+  });
+  document.getElementById('chipsContainer').innerHTML = html;
+}
+
+/* ── Bottom sheet ── */
+function openSheet(type) {
+  currentSheet = type;
+  var overlay = document.getElementById('overlay');
+  var title = document.getElementById('sheetTitle');
+  var searchWrap = document.getElementById('sheetSearchWrap');
+  var searchIn = document.getElementById('sheetSearch');
+  searchIn.value = '';
+
+  if (type === 'rep') {
+    title.textContent = '👤 Select Rep Name';
+    searchWrap.style.display = 'none';
+    renderList(REPS.map(function(r){ return {label:r}; }), 'rep');
+  } else if (type === 'emirate') {
+    title.textContent = '📍 Select Emirate';
+    searchWrap.style.display = 'none';
+    renderList(EMIRATES.map(function(e){ return {label:e}; }), 'emirate');
+  } else if (type === 'pharmacy') {
+    title.textContent = '🏥 Pharmacy Name';
+    searchWrap.style.display = 'flex';
+    document.getElementById('sheetSearch').placeholder = 'Type pharmacy name…';
+    renderPharmacyList('');
+    setTimeout(function(){ searchIn.focus(); }, 300);
+  } else if (type === 'medicine') {
+    title.textContent = '💊 Medicine Name';
+    searchWrap.style.display = 'flex';
+    document.getElementById('sheetSearch').placeholder = 'Search medicines…';
+    renderMedList('');
+    setTimeout(function(){ searchIn.focus(); }, 300);
+  }
+  overlay.classList.add('show');
+}
+
+function renderList(items, type) {
+  var html = '';
+  items.forEach(function(item){
+    var isSelected = (type==='rep' && state.rep===item.label)
+      || (type==='emirate' && state.emirate===item.label);
+    html += '<div class="opt" onclick="pickOption(\''+type+'\',\''+escQ(item.label)+'\',this)">'
+      + '<div><div>'+esc(item.label)+'</div></div>'
+      + (isSelected ? '<span style="color:var(--accent);font-size:16px">✓</span>' : '')
+      + '</div>';
+  });
+  document.getElementById('sheetList').innerHTML = html;
+}
+
+function renderMedList(q) {
+  var list = q
+    ? medicines.filter(function(m){ return m.name.toLowerCase().includes(q.toLowerCase()); }).slice(0,80)
+    : medicines.slice(0,60);
+  var html = '';
+  if (!list.length && q) {
+    // Allow free text entry — marked as custom (medicineOther)
+    html = '<div class="opt" onclick="pickOption(\'medicine\',\''+escQ(q)+'\',this,\'\',\'\',true)">'
+      + '<div><div style="font-weight:600">Use: "'+esc(q)+'"</div>'
+      + '<div class="opt-sub">Not in system — will be flagged for review</div></div>'
+      + '</div>';
+  }
+  list.forEach(function(m){
+    var sp = stockPill(m.status);
+    html += '<div class="opt" onclick="pickOption(\'medicine\',\''+escQ(m.name)+'\',this,\''+m.status+'\',\''+escQ(m.supplier)+'\')">'
+      + '<div style="flex:1"><div>'+hilight(m.name,q)+'</div>'
+      + (m.supplier?'<div class="opt-sub">'+esc(m.supplier)+'</div>':'')
+      + '</div>'+ sp +'</div>';
+  });
+  if (!q && medicines.length) html += '<div style="padding:12px 18px;font-size:11px;color:var(--faint);text-align:center">Start typing to search all '+medicines.length+' medicines</div>';
+  document.getElementById('sheetList').innerHTML = html;
+}
+
+function renderPharmacyList(q) {
+  var html = '';
+  if (pharmacies.length) {
+    var list = q ? pharmacies.filter(function(p){ return p.toLowerCase().includes(q.toLowerCase()); }).slice(0,60)
+      : pharmacies.slice(0,60);
+    list.forEach(function(p){
+      html += '<div class="opt" onclick="pickOption(\'pharmacy\',\''+escQ(p)+'\',this)">'
+        + '<div>'+hilight(p,q)+'</div></div>';
+    });
+    if (!list.length && q) {
+      html = '<div class="opt" onclick="pickOption(\'pharmacy\',\''+escQ(q)+'\',this,\'\',\'\',true)">'
+        + '<div><div style="font-weight:600">Use: "'+esc(q)+'"</div>'
+        + '<div class="opt-sub">New pharmacy — will be added</div></div></div>';
+    }
+  } else {
+    // No pharmacy list loaded — free text
+    if (q) {
+      html = '<div class="opt" onclick="pickOption(\'pharmacy\',\''+escQ(q)+'\',this)">'
+        + '<div><div style="font-weight:600">'+esc(q)+'</div></div></div>';
+    } else {
+      html = '<div style="padding:20px 18px;font-size:13px;color:var(--muted);text-align:center">Type the pharmacy name above</div>';
+    }
+  }
+  document.getElementById('sheetList').innerHTML = html;
+}
+
+function filterSheet(q) {
+  if (currentSheet === 'medicine') renderMedList(q);
+  else if (currentSheet === 'pharmacy') renderPharmacyList(q);
+}
+
+function pickOption(type, value, el, status, sub, isCustom) {
+  state[type] = value;
+  if (type === 'medicine') {
+    state.medicineStatus = status || '';
+    state.medicineOther = isCustom ? value : '';
+    document.getElementById('medVal').textContent = value;
+    document.getElementById('medVal').classList.remove('ph');
+    // Show stock alert
+    var alert = document.getElementById('medAlert');
+    if (status === 'oos') {
+      alert.className = 'alert-banner oos';
+      alert.innerHTML = '⚠️ <span><b>'+esc(value)+'</b> is currently out of stock — request will be marked urgent.</span>';
+    } else if (status === 'low') {
+      alert.className = 'alert-banner low';
+      alert.innerHTML = '⚠️ <span><b>'+esc(value)+'</b> is low stock — will be prioritised.</span>';
+    } else {
+      alert.className = 'alert-banner';
+      alert.style.display = 'none';
+    }
+  } else if (type === 'rep') {
+    state.rep = value;
+    document.getElementById('repVal').textContent = value;
+    document.getElementById('repVal').classList.remove('ph');
+  } else if (type === 'emirate') {
+    state.emirate = value;
+    document.getElementById('emirateVal').textContent = value;
+    document.getElementById('emirateVal').classList.remove('ph');
+  } else if (type === 'pharmacy') {
+    state.pharmacy = value;
+    state.pharmacyOther = isCustom ? value : '';
+    document.getElementById('pharmacyVal').textContent = value;
+    document.getElementById('pharmacyVal').classList.remove('ph');
+  }
+  updateProg();
+  // Small delay then close for feedback
+  setTimeout(function(){
+    if (type !== 'medicine' && type !== 'pharmacy') closeOverlay();
+  }, 150);
+}
+
+function closeSheet(e) { if (e.target === document.getElementById('overlay')) closeOverlay(); }
+function closeOverlay() {
+  document.getElementById('overlay').classList.remove('show');
+  currentSheet = '';
+}
+
+/* ── Chips ── */
+function selChip(el, label) {
+  document.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('sel'); });
+  el.classList.add('sel');
+  state.issueType = label;
+  updateProg();
+}
+
+/* ── Priority ── */
+function selPri(el, level) {
+  document.querySelectorAll('.pri-btn').forEach(function(b){ b.classList.remove('sel'); });
+  el.classList.add('sel');
+  state.priority = level;
+}
+
+/* ── Quantity ── */
+function chgQty(d) {
+  state.qty = Math.max(1, (state.qty||1) + d);
+  document.getElementById('qtyVal').textContent = state.qty;
+}
+
+/* ── Progress ── */
+function updateProg() {
+  var score = 0;
+  if (state.rep) score += 20;
+  if (state.pharmacy) score += 20;
+  if (state.medicine) score += 25;
+  if (state.issueType) score += 20;
+  if (state.emirate) score += 15;
+  document.getElementById('progBar').style.width = score + '%';
+}
+
+/* ── Submit ── */
+function submitForm() {
+  if (!state.rep) { shake('repRow'); alert('Please select your name.'); return; }
+  if (!state.emirate) { shake('emirateRow'); alert('Please select an emirate.'); return; }
+  if (!state.pharmacy) { shake('pharmacyRow'); alert('Please enter the pharmacy name.'); return; }
+  if (!state.medicine) { shake('medRow'); alert('Please select a medicine.'); return; }
+  if (!state.issueType) { document.getElementById('chipsContainer').style.boxShadow='0 0 0 2px var(--err)'; alert('Please select an issue type.'); return; }
+
+  var btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span> Submitting…';
+
+  var payload = {
+    timestamp: new Date().toISOString(),
+    rep: state.rep,
+    emirate: state.emirate,
+    pharmacy: state.pharmacy,
+    pharmacyOther: state.pharmacyOther,
+    medicine: state.medicine,
+    medicineOther: state.medicineOther,
+    issueType: state.issueType,
+    qty: state.qty,
+    priority: state.priority,
+    notes: document.getElementById('notesField').value.trim(),
+    stockStatus: state.medicineStatus
+  };
+
+  if (!SUBMIT_URL || SUBMIT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
+    // Demo mode — show success without real submission
+    setTimeout(function(){ showSuccess(); }, 900);
+    return;
+  }
+
+  fetch(SUBMIT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(res){
+    if (res.status === 'ok') showSuccess();
+    else { btn.disabled=false; btn.innerHTML='<span>📤</span> Submit Request'; alert('Error: ' + (res.message||'Unknown error')); }
+  })
+  .catch(function(err){
+    btn.disabled=false; btn.innerHTML='<span>📤</span> Submit Request';
+    alert('Could not submit. Please check your connection and try again.');
+  });
+}
+
+function showSuccess() {
+  document.getElementById('mainForm').style.display = 'none';
+  var s = document.getElementById('successScreen');
+  s.style.display = 'flex';
+  document.getElementById('progBar').style.width = '100%';
+}
+
+function resetForm() {
+  state = { rep:state.rep, emirate:state.emirate, pharmacy:'', pharmacyOther:'',
+    medicine:'', medicineOther:'', medicineStatus:'', issueType:'', priority:'medium', qty:1, notes:'' };
+  document.getElementById('pharmacyVal').textContent='Search pharmacy…'; document.getElementById('pharmacyVal').className='fval ph';
+  document.getElementById('medVal').textContent='Search from '+medicines.length+' medicines…'; document.getElementById('medVal').className='fval ph';
+  document.getElementById('medAlert').className='alert-banner'; document.getElementById('medAlert').style.display='';
+  document.getElementById('notesField').value='';
+  document.getElementById('qtyVal').textContent='1';
+  document.querySelectorAll('.chip').forEach(function(c){c.classList.remove('sel');});
+  document.querySelectorAll('.pri-btn').forEach(function(b){b.classList.remove('sel');});
+  document.querySelector('.pri-btn.medium').classList.add('sel');
+  var btn=document.getElementById('submitBtn');
+  btn.disabled=false; btn.innerHTML='<span>📤</span> Submit Request';
+  document.getElementById('successScreen').style.display='none';
+  document.getElementById('mainForm').style.display='block';
+  updateProg();
+}
+
+/* ── Helpers ── */
+function stockPill(s) {
+  if (!s) return '';
+  var label = s==='oos'?'Out of stock':s==='low'?'Low stock':'In stock';
+  return '<span class="stock-pill '+s+'">'+label+'</span>';
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escQ(s){ return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+function hilight(text, q) {
+  if (!q) return esc(text);
+  return esc(text).replace(new RegExp('('+esc(q)+')','gi'),'<mark style="background:#ffe08a;border-radius:2px;padding:0 1px">$1</mark>');
+}
+function shake(id) {
+  var el=document.getElementById(id);
+  el.style.transition='transform .08s'; el.style.transform='translateX(6px)';
+  setTimeout(function(){ el.style.transform='translateX(-6px)'; },80);
+  setTimeout(function(){ el.style.transform=''; },160);
+}
+
+// Start
+loadData();
+</script>
