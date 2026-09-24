@@ -13,6 +13,13 @@
   ║     request.html                                     ║
   ╚══════════════════════════════════════════════════════╝
 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Medicine Request — Vitals</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
@@ -46,11 +53,13 @@
   --faint:#4a6872;--line:#243642;--accent:#0fbfad;--accent-lt:#0fbfad18;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
+html{height:100%;overflow-y:scroll;-webkit-overflow-scrolling:touch;}
 body{
   background:var(--bg);font-family:'Inter',system-ui,sans-serif;
-  font-size:14px;color:var(--ink);min-height:100%;
+  font-size:16px;color:var(--ink);min-height:100%;
   padding-inline:16px;padding-block:0 40px;
 }
+body.sheet-open{overflow:hidden;position:fixed;width:100%;}
 /* ── Header ── */
 .app-header{
   background:linear-gradient(155deg,#1B4F5C 0%,#0d3540 100%);
@@ -104,7 +113,7 @@ body{
   font-size:12px;color:var(--muted);cursor:pointer;font-family:inherit;}
 .sheet-search{padding:10px 16px;border-bottom:1px solid var(--line);}
 .sheet-search input{width:100%;border:1.5px solid var(--line);border-radius:9px;
-  padding:9px 12px;font-family:inherit;font-size:13px;color:var(--ink);
+  padding:9px 12px;font-family:inherit;font-size:16px;color:var(--ink);
   background:var(--bg);outline:none;}
 .sheet-search input:focus{border-color:var(--accent);}
 .sheet-list{overflow-y:auto;flex:1;}
@@ -156,7 +165,7 @@ body{
 .other-row label{font-size:10.5px;color:var(--accent);font-weight:700;text-transform:uppercase;
   letter-spacing:.07em;display:block;margin-bottom:6px;}
 .other-row input,.other-row textarea{width:100%;border:1.5px solid var(--accent);border-radius:9px;
-  padding:9px 12px;font-family:inherit;font-size:13px;color:var(--ink);background:var(--panel);
+  padding:9px 12px;font-family:inherit;font-size:16px;color:var(--ink);background:var(--panel);
   outline:none;line-height:1.5;resize:vertical;}
 .other-row input::placeholder,.other-row textarea::placeholder{color:var(--faint);}
 /* ── Notes ── */
@@ -165,7 +174,7 @@ body{
 .notes-lbl{font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;
   letter-spacing:.06em;margin-bottom:8px;}
 .notes-ta{width:100%;min-height:70px;border:none;background:transparent;
-  font-family:inherit;font-size:13px;color:var(--ink);resize:none;outline:none;line-height:1.55;}
+  font-family:inherit;font-size:16px;color:var(--ink);resize:none;outline:none;line-height:1.55;}
 .notes-ta::placeholder{color:var(--faint);}
 /* ── Submit ── */
 .submit-btn{width:100%;padding:16px;border-radius:var(--r);border:none;
@@ -272,7 +281,7 @@ var ISSUE_TYPES = [
     <div class="frow" id="emirateRow" onclick="openSheet('emirate')">
       <div class="fi">📍</div>
       <div class="fc">
-        <div class="flabel">Emirate *</div>
+        <div class="flabel">Emirate</div>
         <div class="fval ph" id="emirateVal">Select emirate…</div>
       </div>
       <div class="fchev">›</div>
@@ -280,13 +289,13 @@ var ISSUE_TYPES = [
     <div class="frow" id="pharmacyRow" onclick="openSheet('pharmacy')">
       <div class="fi">🏥</div>
       <div class="fc">
-        <div class="flabel">Pharmacy Name *</div>
+        <div class="flabel">Pharmacy Name</div>
         <div class="fval ph" id="pharmacyVal">Search pharmacy…</div>
       </div>
       <div class="fchev">›</div>
     </div>
     <div class="other-row" id="pharmacyOtherRow">
-      <label>Pharmacy name (custom) *</label>
+      <label>Pharmacy name (custom)</label>
       <input type="text" id="pharmacyOtherInput" placeholder="Type the exact pharmacy name…"
         oninput="state.pharmacyOther=this.value.trim();updateProg()">
     </div>
@@ -305,7 +314,7 @@ var ISSUE_TYPES = [
       <div class="fchev">›</div>
     </div>
     <div class="qty-row">
-      <div class="qty-lbl">Quantity Required *</div>
+      <div class="qty-lbl">Quantity</div>
       <div class="qty-ctrl">
         <button class="qbtn" onclick="chgQty(-1)">−</button>
         <div class="qval" id="qtyVal">1</div>
@@ -317,10 +326,10 @@ var ISSUE_TYPES = [
   <!-- ISSUE TYPE -->
   <div class="slabel">Issue Type</div>
   <div class="chips-wrap">
-    <div class="chips-lbl">What's the issue? *</div>
+    <div class="chips-lbl">What's the issue?</div>
     <div class="chips" id="chipsContainer"></div>
     <div class="other-row" id="issueOtherRow" style="margin:10px -16px -14px;border-radius:0 0 var(--r) var(--r);">
-      <label>Describe the issue *</label>
+      <label>Describe the issue</label>
       <textarea id="issueOtherInput" placeholder="Please describe the issue in a few words…" rows="2"
         oninput="state.issueOther=this.value.trim();updateProg()"></textarea>
     </div>
@@ -475,6 +484,9 @@ function openSheet(type) {
     renderMedList('');
     setTimeout(function(){ searchIn.focus(); }, 300);
   }
+  document.body.scrollTop_saved = window.scrollY;
+  document.body.style.top = '-' + window.scrollY + 'px';
+  document.body.classList.add('sheet-open');
   overlay.classList.add('show');
 }
 
@@ -600,15 +612,17 @@ function pickOption(type, value, el, status, sub, isCustom) {
     }
   }
   updateProg();
-  // Small delay then close for feedback
-  setTimeout(function(){
-    if (type !== 'medicine' && type !== 'pharmacy') closeOverlay();
-  }, 150);
+  // Close after selection for all types
+  setTimeout(function(){ closeOverlay(); }, 150);
 }
 
 function closeSheet(e) { if (e.target === document.getElementById('overlay')) closeOverlay(); }
 function closeOverlay() {
   document.getElementById('overlay').classList.remove('show');
+  document.body.classList.remove('sheet-open');
+  var scrollY = document.body.scrollTop_saved || 0;
+  document.body.style.top = '';
+  window.scrollTo(0, scrollY);
   currentSheet = '';
 }
 
@@ -646,11 +660,8 @@ function chgQty(d) {
 /* ── Progress ── */
 function updateProg() {
   var score = 0;
-  if (state.rep) score += 20;
-  if (state.pharmacy) score += 20;
-  if (state.medicine) score += 25;
-  if (state.issueType) score += 20;
-  if (state.emirate) score += 15;
+  if (state.rep) score += 50;
+  if (state.medicine) score += 50;
   document.getElementById('progBar').style.width = score + '%';
 }
 
@@ -661,39 +672,28 @@ function submitForm() {
     document.getElementById('repOtherInput').focus();
     alert('Please type your actual name.'); return;
   }
-  if (!state.emirate) { shake('emirateRow'); alert('Please select an emirate.'); return; }
-  if (!state.pharmacy) { shake('pharmacyRow'); alert('Please enter the pharmacy name.'); return; }
-  if ((state.pharmacy === 'Other') && !state.pharmacyOther) {
-    document.getElementById('pharmacyOtherInput').focus();
-    alert('Please type the pharmacy name.'); return;
-  }
   if (!state.medicine) { shake('medRow'); alert('Please select a medicine.'); return; }
-  if (!state.issueType) { document.getElementById('chipsContainer').style.boxShadow='0 0 0 2px var(--err)'; alert('Please select an issue type.'); return; }
-  if (state.issueType === 'Other' && !state.issueOther) {
-    document.getElementById('issueOtherInput').focus();
-    alert('Please describe the issue.'); return;
-  }
 
   var btn = document.getElementById('submitBtn');
   btn.disabled = true;
   btn.innerHTML = '<span>⏳</span> Submitting…';
 
   var repName = (state.rep === 'Other' && state.repOther) ? state.repOther : state.rep;
-  var issueLabel = (state.issueType === 'Other' && state.issueOther) ? ('Other: ' + state.issueOther) : state.issueType;
-  var pharmacyName = (state.pharmacy === 'Other' && state.pharmacyOther) ? state.pharmacyOther : state.pharmacy;
+  var issueLabel = state.issueType ? ((state.issueType === 'Other' && state.issueOther) ? ('Other: ' + state.issueOther) : state.issueType) : '';
+  var pharmacyName = state.pharmacy ? ((state.pharmacy === 'Other' && state.pharmacyOther) ? state.pharmacyOther : state.pharmacy) : '';
   var payload = {
     timestamp: new Date().toISOString(),
     rep: repName,
-    emirate: state.emirate,
+    emirate: state.emirate || '',
     pharmacy: pharmacyName,
-    pharmacyOther: state.pharmacyOther,
+    pharmacyOther: state.pharmacyOther || '',
     medicine: state.medicine,
-    medicineOther: state.medicineOther,
+    medicineOther: state.medicineOther || '',
     issueType: issueLabel,
-    qty: state.qty,
-    priority: state.priority,
+    qty: state.qty || 1,
+    priority: state.priority || 'medium',
     notes: document.getElementById('notesField').value.trim(),
-    stockStatus: state.medicineStatus
+    stockStatus: state.medicineStatus || ''
   };
 
   if (!SUBMIT_URL || SUBMIT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
