@@ -9425,12 +9425,13 @@ function handlePriceFile(file){
       if(!found){ setPriceNote("Couldn't find a 'Description' column — is this the Products Price List file?"); return; }
       const head=found.aoa[found.hr].map(c=>String(c).trim().toLowerCase());
       const iName=head.indexOf("description");
-      const iStock=head.findIndex(h=>h==="stock");
+      const iStock=head.findIndex(h=>h==="stock"||h==="quantity"||h==="qty"||h==="quandity");
       const iPrice=head.findIndex(h=>h==="unit price"||h==="price");
       const iBonus=head.findIndex(h=>h==="bonus");
       const iExp=head.findIndex(h=>h==="expiry"||h==="expiry date");
       const byName={}; meds.forEach(m=> byName[normName(m.name)]=m);
       const plan={fields:{},status:{},newMeds:[],matched:0,newCount:0,statusChanges:0,statusBreak:{}};
+      const _seenNew={};
       for(let r=found.hr+1;r<found.aoa.length;r++){
         const row=found.aoa[r]; if(!row||row[iName]==null||String(row[iName]).trim()==="") continue;
         const nm=String(row[iName]).trim(); const lk=normName(nm);
@@ -9438,24 +9439,57 @@ function handlePriceFile(file){
         const price=iPrice>=0?row[iPrice]:undefined;
         const bonus=iBonus>=0?row[iBonus]:undefined;
         const exp=iExp>=0?row[iExp]:undefined;
-        const f={};
-        if(stock!==undefined&&stock!=="") f.stock=Number(stock);
-        if(price!==undefined&&price!=="") f.price=Number(price);
-        if(bonus!==undefined&&bonus!=="") f.bonus=String(bonus);
-        if(exp!==undefined&&exp!=="") f.expiry = (exp instanceof Date && !isNaN(exp.getTime())) ? exp.toISOString().slice(0,10) : String(exp);
+        const expStr = (exp!==undefined&&exp!=="") ? ((exp instanceof Date && !isNaN(exp.getTime())) ? exp.toISOString().slice(0,10) : String(exp)) : undefined;
         const m=byName[lk];
-        if(m){ plan.fields[m.key]=f; plan.matched++; }
-        else {
-          const ns=statusFromStock(f.stock)||"MISCELLANEOUS";
-          plan.newMeds.push({key:"p"+r,name:nm,status:ns,isNew:true,stock:f.stock??null,
-            demand:null,daysCover:null,margin:null,sold13m:null,topCustomer:"",topSalesperson:"",
-            expiry:f.expiry??null,price:f.price??null,bonus:f.bonus??null});
-          plan.newCount++;
+        if(m){
+          if(!plan.fields[m.key]){
+            /* first row for this medicine */
+            const f={};
+            if(stock!==undefined&&stock!=="") f.stock=Number(stock);
+            if(price!==undefined&&price!=="") f.price=Number(price);
+            if(bonus!==undefined&&bonus!=="") f.bonus=String(bonus);
+            if(expStr!==undefined) f.expiry=expStr;
+            plan.fields[m.key]=f; plan.matched++;
+          } else {
+            /* duplicate batch row — sum stock, keep nearest expiry */
+            if(stock!==undefined&&stock!=="") plan.fields[m.key].stock=(plan.fields[m.key].stock||0)+Number(stock);
+            if(expStr!==undefined){
+              const prev=new Date(plan.fields[m.key].expiry), cur=new Date(expStr);
+              if(!isNaN(cur.getTime())&&(isNaN(prev.getTime())||cur<prev)) plan.fields[m.key].expiry=expStr;
+            }
+          }
+        } else {
+          if(!_seenNew[lk]){
+            const f={};
+            if(stock!==undefined&&stock!=="") f.stock=Number(stock);
+            if(price!==undefined&&price!=="") f.price=Number(price);
+            if(bonus!==undefined&&bonus!=="") f.bonus=String(bonus);
+            if(expStr!==undefined) f.expiry=expStr;
+            _seenNew[lk]={idx:plan.newMeds.length, f:f};
+            const ns=statusFromStock(f.stock)||"MISCELLANEOUS";
+            plan.newMeds.push({key:"p"+r,name:nm,status:ns,isNew:true,stock:f.stock??null,
+              demand:null,daysCover:null,margin:null,sold13m:null,topCustomer:"",topSalesperson:"",
+              expiry:f.expiry??null,price:f.price??null,bonus:f.bonus??null});
+            plan.newCount++;
+          } else {
+            /* duplicate batch for new medicine — sum stock */
+            const prev=_seenNew[lk];
+            if(stock!==undefined&&stock!==""){
+              prev.f.stock=(prev.f.stock||0)+Number(stock);
+              plan.newMeds[prev.idx].stock=prev.f.stock;
+            }
+            if(expStr!==undefined){
+              const pd=new Date(prev.f.expiry), cd=new Date(expStr);
+              if(!isNaN(cd.getTime())&&(isNaN(pd.getTime())||cd<pd)){ prev.f.expiry=expStr; plan.newMeds[prev.idx].expiry=expStr; }
+            }
+          }
         }
       }
       pendingPrice=plan;
       updatePriceImpact();
-      setPriceNote(`Matched <b>${plan.matched}</b> medicines in your list. <b>${plan.newCount}</b> item${plan.newCount!==1?'s':''} not in your master will be added as new. Stock, price, bonus & expiry will be refreshed.`);
+      const _totalRows=found.aoa.length-found.hr-1;
+      const _batchNote=_totalRows>plan.matched+plan.newCount?` (${_totalRows} rows aggregated across batches)`:'';
+      setPriceNote(`Matched <b>${plan.matched}</b> medicines in your list. <b>${plan.newCount}</b> item${plan.newCount!==1?'s':''} not in your master will be added as new. Stock${iStock>=0?' (from <b>'+head[iStock]+'</b> column)':' <span style="color:#c00">(no stock column found)</span>'}, price, bonus & expiry will be refreshed.${_batchNote}`);
       document.getElementById("priceApply").disabled = (plan.matched===0&&plan.newCount===0);
     }catch(err){ setPriceNote("That file couldn't be read as an Excel workbook."); }
   };
