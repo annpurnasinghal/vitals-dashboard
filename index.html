@@ -18317,14 +18317,17 @@ function siComputeSeason(m) {
   // Use _seasonal flag (true = seasonal but no label → treat as year-round for filtering)
   if (m._seasonal === false) return 'year-round';
   // Derive from sales series:
-  // MONTH_LABELS: Jun25 Jul Aug Sep Oct Nov Dec Jan26 Feb Mar Apr May Jun26 Jul26
-  // Indices:        0    1   2   3   4   5   6    7    8   9  10   11  12   13
-  // Winter (Oct–Mar): 4,5,6,7,8,9   Summer (Apr–Sep): 0,1,2,3,10,11
+  // First 12 months of the series by calendar month (labels can come from BI, so
+  // the start month varies): Winter Oct–Mar, Summer Apr–Sep
   try {
     var s = typeof seriesOf === 'function' ? seriesOf(m) : null;
     if (s && s.length >= 12) {
-      var winter = s[4]+s[5]+s[6]+s[7]+s[8]+s[9];
-      var summer = s[0]+s[1]+s[2]+s[3]+(s[10]||0)+(s[11]||0);
+      var cal = monthLabelsCalendar(), off = cal.length - s.length;
+      var winter = 0, summer = 0;
+      for (var i = 0; i < 12; i++) {
+        var mo = cal[i + off] ? cal[i + off].month : null;
+        if (mo >= 3 && mo <= 8) summer += (s[i]||0); else winter += (s[i]||0);
+      }
       var total = winter + summer;
       if (total > 0) {
         var wRatio = winter / total;
