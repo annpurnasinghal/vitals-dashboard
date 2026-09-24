@@ -205,6 +205,28 @@ body.sheet-open{overflow:hidden;position:fixed;width:100%;}
   border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pop{0%{transform:scale(0.5);opacity:0}80%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+/* ── Add medicine button ── */
+.add-med-btn{width:100%;padding:14px;border-radius:var(--r);border:2px dashed var(--accent);
+  background:var(--accent-lt);color:var(--accent);font-family:inherit;font-size:14px;
+  font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  gap:6px;transition:all .15s;margin-bottom:10px;-webkit-tap-highlight-color:transparent;}
+.add-med-btn:active{transform:scale(.98);background:var(--accent);color:#fff;}
+/* ── Medicine list item ── */
+.med-item{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);
+  margin-bottom:8px;overflow:hidden;animation:pop .25s ease;}
+.med-item-head{display:flex;align-items:center;gap:10px;padding:12px 14px;}
+.med-item-info{flex:1;min-width:0;}
+.med-item-name{font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.med-item-status{font-size:11px;color:var(--muted);margin-top:2px;}
+.med-item-del{width:32px;height:32px;border-radius:8px;border:none;background:var(--err-bg);
+  color:var(--err);font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;-webkit-tap-highlight-color:transparent;}
+.med-item-del:active{background:var(--err);color:#fff;}
+.med-item-qty{display:flex;align-items:center;gap:10px;padding:6px 14px 12px;justify-content:flex-end;}
+.med-item-qty .qty-lbl{font-size:12px;color:var(--muted);flex:1;}
+.med-count-badge{display:inline-flex;align-items:center;justify-content:center;
+  background:var(--accent);color:#fff;font-size:11px;font-weight:700;
+  width:20px;height:20px;border-radius:50%;margin-left:6px;}
 </style>
 
 <!-- ════════════════ CONFIGURATION ════════════════ -->
@@ -301,27 +323,13 @@ var ISSUE_TYPES = [
     </div>
   </div>
 
-  <!-- MEDICINE -->
-  <div class="slabel">Medicine</div>
+  <!-- MEDICINES (multi) -->
+  <div class="slabel">Medicines *</div>
   <div id="medAlert" class="alert-banner"></div>
-  <div class="card">
-    <div class="frow" id="medRow" onclick="openSheet('medicine')">
-      <div class="fi">💊</div>
-      <div class="fc">
-        <div class="flabel">Medicine Name *</div>
-        <div class="fval ph" id="medVal">Loading medicines…</div>
-      </div>
-      <div class="fchev">›</div>
-    </div>
-    <div class="qty-row">
-      <div class="qty-lbl">Quantity</div>
-      <div class="qty-ctrl">
-        <button class="qbtn" onclick="chgQty(-1)">−</button>
-        <div class="qval" id="qtyVal">1</div>
-        <button class="qbtn" onclick="chgQty(1)">+</button>
-      </div>
-    </div>
-  </div>
+  <div id="medListWrap"></div>
+  <button class="add-med-btn" id="addMedBtn" onclick="openSheet('medicine')">
+    <span>＋</span> Add Medicine
+  </button>
 
   <!-- ISSUE TYPE -->
   <div class="slabel">Issue Type</div>
@@ -360,7 +368,7 @@ var ISSUE_TYPES = [
 <div class="success-screen" id="successScreen">
   <div class="success-icon">✅</div>
   <div class="success-title">Request Submitted!</div>
-  <div class="success-sub">Your request has been logged. The team will review it and get back to you shortly.</div>
+  <div class="success-sub" id="successSub">Your request has been logged. The team will review it and get back to you shortly.</div>
   <button class="again-btn" onclick="resetForm()">＋ Submit Another Request</button>
 </div>
 
@@ -382,9 +390,9 @@ var ISSUE_TYPES = [
 var state = {
   rep: '', repOther: '',
   emirate: '', pharmacy: '', pharmacyOther: '',
-  medicine: '', medicineOther: '', medicineStatus: '',
+  medicines: [],  // [{name, status, qty, isCustom}]
   issueType: '', issueOther: '',
-  priority: 'medium', qty: 1, notes: ''
+  priority: 'medium', notes: ''
 };
 var medicines = [];
 var pharmacies = [];
@@ -561,21 +569,24 @@ function filterSheet(q) {
 function pickOption(type, value, el, status, sub, isCustom) {
   state[type] = value;
   if (type === 'medicine') {
-    state.medicineStatus = status || '';
-    state.medicineOther = isCustom ? value : '';
-    document.getElementById('medVal').textContent = value;
-    document.getElementById('medVal').classList.remove('ph');
-    // Show stock alert
+    // Add to medicines list (avoid exact duplicates)
+    var already = state.medicines.some(function(m){ return m.name === value; });
+    if (!already) {
+      state.medicines.push({ name: value, status: status || '', qty: 1, isCustom: !!isCustom });
+    }
+    renderMedItems();
+    // Show stock alert for the just-added medicine
     var alert = document.getElementById('medAlert');
     if (status === 'oos') {
       alert.className = 'alert-banner oos';
-      alert.innerHTML = '⚠️ <span><b>'+esc(value)+'</b> is currently out of stock — request will be marked urgent.</span>';
+      alert.innerHTML = '⚠️ <span><b>'+esc(value)+'</b> is currently out of stock.</span>';
+      setTimeout(function(){ alert.className='alert-banner'; }, 3000);
     } else if (status === 'low') {
       alert.className = 'alert-banner low';
-      alert.innerHTML = '⚠️ <span><b>'+esc(value)+'</b> is low stock — will be prioritised.</span>';
+      alert.innerHTML = '⚠️ <span><b>'+esc(value)+'</b> is low stock.</span>';
+      setTimeout(function(){ alert.className='alert-banner'; }, 3000);
     } else {
       alert.className = 'alert-banner';
-      alert.style.display = 'none';
     }
   } else if (type === 'rep') {
     state.rep = value;
@@ -651,96 +662,147 @@ function selPri(el, level) {
   state.priority = level;
 }
 
-/* ── Quantity ── */
-function chgQty(d) {
-  state.qty = Math.max(1, (state.qty||1) + d);
-  document.getElementById('qtyVal').textContent = state.qty;
+/* ── Medicine list rendering ── */
+function renderMedItems() {
+  var wrap = document.getElementById('medListWrap');
+  if (!state.medicines.length) {
+    wrap.innerHTML = '';
+    updateProg();
+    return;
+  }
+  var html = '';
+  state.medicines.forEach(function(m, i) {
+    var statusLabel = m.status === 'oos' ? '<span class="stock-pill oos">Out of stock</span>'
+      : m.status === 'low' ? '<span class="stock-pill low">Low stock</span>' : '';
+    html += '<div class="med-item">'
+      + '<div class="med-item-head">'
+      + '<div style="font-size:17px">💊</div>'
+      + '<div class="med-item-info"><div class="med-item-name">' + esc(m.name) + '</div>'
+      + (m.isCustom ? '<div class="med-item-status">Custom — not in system</div>' : '')
+      + '</div>'
+      + statusLabel
+      + '<button class="med-item-del" onclick="removeMed(' + i + ')" title="Remove">✕</button>'
+      + '</div>'
+      + '<div class="med-item-qty">'
+      + '<div class="qty-lbl">Qty</div>'
+      + '<div class="qty-ctrl">'
+      + '<button class="qbtn" onclick="chgMedQty(' + i + ',-1)">−</button>'
+      + '<div class="qval">' + m.qty + '</div>'
+      + '<button class="qbtn" onclick="chgMedQty(' + i + ',1)">+</button>'
+      + '</div></div></div>';
+  });
+  wrap.innerHTML = html;
+  // Update add button label
+  var btn = document.getElementById('addMedBtn');
+  btn.innerHTML = '<span>＋</span> Add Another Medicine <span class="med-count-badge">' + state.medicines.length + '</span>';
+  updateProg();
+}
+
+function chgMedQty(idx, d) {
+  state.medicines[idx].qty = Math.max(1, state.medicines[idx].qty + d);
+  renderMedItems();
+}
+
+function removeMed(idx) {
+  state.medicines.splice(idx, 1);
+  renderMedItems();
+  if (!state.medicines.length) {
+    document.getElementById('addMedBtn').innerHTML = '<span>＋</span> Add Medicine';
+  }
 }
 
 /* ── Progress ── */
 function updateProg() {
   var score = 0;
   if (state.rep) score += 50;
-  if (state.medicine) score += 50;
+  if (state.medicines.length) score += 50;
   document.getElementById('progBar').style.width = score + '%';
 }
 
 /* ── Submit ── */
 function submitForm() {
-  if (!state.rep) { shake('repRow'); alert('Please select your name.'); return; }
+  if (!state.rep) { shake('addMedBtn'); alert('Please select your name.'); return; }
   if (state.rep === 'Other' && !state.repOther) {
     document.getElementById('repOtherInput').focus();
     alert('Please type your actual name.'); return;
   }
-  if (!state.medicine) { shake('medRow'); alert('Please select a medicine.'); return; }
+  if (!state.medicines.length) { shake('addMedBtn'); alert('Please add at least one medicine.'); return; }
 
   var btn = document.getElementById('submitBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span>⏳</span> Submitting…';
+  btn.innerHTML = '<span>⏳</span> Submitting ' + state.medicines.length + ' item' + (state.medicines.length>1?'s':'') + '…';
 
   var repName = (state.rep === 'Other' && state.repOther) ? state.repOther : state.rep;
   var issueLabel = state.issueType ? ((state.issueType === 'Other' && state.issueOther) ? ('Other: ' + state.issueOther) : state.issueType) : '';
   var pharmacyName = state.pharmacy ? ((state.pharmacy === 'Other' && state.pharmacyOther) ? state.pharmacyOther : state.pharmacy) : '';
-  var payload = {
-    timestamp: new Date().toISOString(),
-    rep: repName,
-    emirate: state.emirate || '',
-    pharmacy: pharmacyName,
-    pharmacyOther: state.pharmacyOther || '',
-    medicine: state.medicine,
-    medicineOther: state.medicineOther || '',
-    issueType: issueLabel,
-    qty: state.qty || 1,
-    priority: state.priority || 'medium',
-    notes: document.getElementById('notesField').value.trim(),
-    stockStatus: state.medicineStatus || ''
-  };
+  var notes = document.getElementById('notesField').value.trim();
+
+  // Build one payload per medicine
+  var payloads = state.medicines.map(function(m) {
+    return {
+      timestamp: new Date().toISOString(),
+      rep: repName,
+      emirate: state.emirate || '',
+      pharmacy: pharmacyName,
+      pharmacyOther: state.pharmacyOther || '',
+      medicine: m.name,
+      medicineOther: m.isCustom ? m.name : '',
+      issueType: issueLabel,
+      qty: m.qty || 1,
+      priority: state.priority || 'medium',
+      notes: notes,
+      stockStatus: m.status || ''
+    };
+  });
 
   if (!SUBMIT_URL || SUBMIT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
-    // Demo mode — show success without real submission
     setTimeout(function(){ showSuccess(); }, 900);
     return;
   }
 
-  var url = SUBMIT_URL + '?data=' + encodeURIComponent(JSON.stringify(payload));
-  fetch(url)
-  .then(function(r){ return r.json(); })
-  .then(function(json){
-    if (json && json.status === 'ok') {
-      showSuccess();
-    } else {
+  // Send all medicines (sequentially to avoid rate limits)
+  var idx = 0;
+  function sendNext() {
+    if (idx >= payloads.length) { showSuccess(); return; }
+    var url = SUBMIT_URL + '?data=' + encodeURIComponent(JSON.stringify(payloads[idx]));
+    btn.innerHTML = '<span>⏳</span> Sending ' + (idx+1) + ' of ' + payloads.length + '…';
+    fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(json){
+      if (json && json.status === 'ok') { idx++; sendNext(); }
+      else { btn.disabled=false; btn.innerHTML='<span>📤</span> Submit Request'; alert('Error on item '+(idx+1)+': '+(json&&json.message||'Unknown error')); }
+    })
+    .catch(function(){
       btn.disabled=false; btn.innerHTML='<span>📤</span> Submit Request';
-      alert('Submission error: ' + (json && json.message ? json.message : 'Unknown error. Please try again.'));
-    }
-  })
-  .catch(function(){
-    btn.disabled=false; btn.innerHTML='<span>📤</span> Submit Request';
-    alert('Could not submit. Please check your connection and try again.');
-  });
+      alert('Could not submit item '+(idx+1)+'. Check your connection.');
+    });
+  }
+  sendNext();
 }
 
 function showSuccess() {
+  var count = state.medicines.length;
   document.getElementById('mainForm').style.display = 'none';
   var s = document.getElementById('successScreen');
   s.style.display = 'flex';
   document.getElementById('progBar').style.width = '100%';
+  document.getElementById('successSub').innerHTML = count + ' medicine' + (count>1?'s':'') + ' submitted. The team will review and get back to you shortly.';
 }
 
 function resetForm() {
   state = { rep:state.rep, repOther:'', emirate:state.emirate, pharmacy:'', pharmacyOther:'',
-    medicine:'', medicineOther:'', medicineStatus:'', issueType:'', issueOther:'',
-    priority:'medium', qty:1, notes:'' };
+    medicines: [],
+    issueType:'', issueOther:'',
+    priority:'medium', notes:'' };
   document.getElementById('pharmacyVal').textContent='Search pharmacy…'; document.getElementById('pharmacyVal').className='fval ph';
   document.getElementById('pharmacyOtherRow').classList.remove('vis');
   document.getElementById('pharmacyOtherInput').value='';
   document.getElementById('issueOtherRow').classList.remove('vis');
   document.getElementById('issueOtherInput').value='';
-  var medCount = medicines.length ? medicines.length.toLocaleString() : '';
-  document.getElementById('medVal').textContent = medCount ? 'Search from '+medCount+' medicines…' : 'Type any medicine name…';
-  document.getElementById('medVal').className='fval ph';
-  document.getElementById('medAlert').className='alert-banner'; document.getElementById('medAlert').style.display='';
+  document.getElementById('medListWrap').innerHTML='';
+  document.getElementById('addMedBtn').innerHTML='<span>＋</span> Add Medicine';
+  document.getElementById('medAlert').className='alert-banner';
   document.getElementById('notesField').value='';
-  document.getElementById('qtyVal').textContent='1';
   document.querySelectorAll('.chip').forEach(function(c){c.classList.remove('sel');});
   document.querySelectorAll('.pri-btn').forEach(function(b){b.classList.remove('sel');});
   document.querySelector('.pri-btn.medium').classList.add('sel');
