@@ -1754,7 +1754,6 @@ const SUMMER_MOLECULES = [
 ];
 const MONTHS = ["2025-06","2025-07","2025-08","2025-09","2025-10","2025-11","2025-12","2026-01","2026-02","2026-03","2026-04","2026-05","2026-06"];
 const MONTH_LABELS = ["Jun25","Jul","Aug","Sep","Oct","Nov","Dec","Jan26","Feb","Mar","Apr","May","Jun26","Jul26"];
-let BI_SALES = null;   // {labels, qty:{norm:[..]}} from BI sync; replaces SALES_MONTHLY in seriesOf
 
 const CANON_ACTIONS = [
   "Pending","Ordered","Back-ordered","Received","Alternate Sourced",
@@ -2388,9 +2387,6 @@ function monthSeriesIndex(year, month){
 }
 function seriesOf(m){
   const key=normName(m.name);
-  // BI's monthly sales, once synced, are the whole history: labels and series come
-  // from BI together, so console-side appends and corrections no longer apply
-  if(BI_SALES){ const q=BI_SALES.qty[key]; return q ? q.slice() : null; }
   const base=SALES_MONTHLY[key] || null;
   let series = base ? base.slice() : [];
   if(state.salesAppend && state.salesAppend.length){
@@ -17644,7 +17640,7 @@ document.addEventListener('keydown', function(e) {
   }
 })();
 
-// ─── LIVE SYNC (BI feeds + workflow state) ───────────────────────────────────
+// ─── GITHUB AUTO-SYNC ────────────────────────────────────────────────────────
 function ghSetSync(s, msg) {
   const pill = document.getElementById('syncPill');
   if (!pill) return;
@@ -17657,144 +17653,45 @@ function ghSetSync(s, msg) {
   if (btn) btn.style.display = s === 'syncing' ? 'none' : 'inline-block';
 }
 
-// Focus-derived data (MRN receipts, stock / price / bonus / expiry, monthly sales,
-// DDC registry) comes from BI's login-protected /console/api/ endpoints. BI serves
-// this page under /console/, so the relative URL is same-origin and carries the BI
-// session cookie. The committed vitals_state.json is still read, but only for what
-// people typed (remarks, statuses, quotes, settings, new-medicine entries) until
-// console workflow state has a home of its own; its mrn and stock are not applied.
-const BI_SYNC_DEFAULT = 'api/state.json';
 const GH_SYNC_DEFAULT = 'https://raw.githubusercontent.com/annpurnasinghal/vitals-dashboard/main/vitals_state.json';
-
-async function biFetch(url) {
-  const resp = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now(),
-    {cache:'no-store', credentials:'same-origin'});
-  // signed out: BI answers 303 to its login page, which fetch follows to HTML
-  const ct = resp.headers.get('content-type') || '';
-  if (resp.redirected || (resp.ok && !ct.includes('json'))) throw new Error('signin');
-  if (resp.status === 403) throw new Error('noperm');
-  if (!resp.ok) throw new Error('HTTP ' + resp.status);
-  return resp.json();
-}
-
-/* console-style labels: year only at the start, on January, or on a repeated month */
-function biMonthLabels(labels) {
-  const seen = new Set();
-  return labels.map((lbl, i) => {
-    const mon = String(lbl).slice(0, 3);
-    const out = (i === 0 || mon === 'Jan' || seen.has(mon)) ? lbl : mon;
-    seen.add(mon);
-    return out;
-  });
-}
-
-function applyGithubWorkflow(ps) {
-  state.remarks        = Object.assign({}, state.remarks,        ps.remarks||{});
-  state.statusOverrides= Object.assign({}, state.statusOverrides,ps.statusOverrides||{});
-  // price / bonus / expiry typed or imported in the console; stock comes from BI only
-  Object.entries(ps.fields||{}).forEach(([k,f])=>{
-    const {stock, ...rest} = f||{};
-    state.fields[k] = Object.assign({}, state.fields[k], rest);
-  });
-  const inc = ps.suppliers||{};
-  Object.entries(inc).forEach(([k,qs])=>{
-    if(!state.suppliers[k]) state.suppliers[k]=qs;
-    else qs.forEach(q=>{
-      const i=state.suppliers[k].findIndex(x=>(x.supplier||'').toLowerCase()===(q.supplier||'').toLowerCase());
-      if(i>=0) state.suppliers[k][i]=q; else state.suppliers[k].push(q);
-    });
-  });
-  const existKeys=new Set(state.newMeds.map(n=>n.key));
-  (ps.newMeds||[]).forEach(n=>{ if(!existKeys.has(n.key)) state.newMeds.push(n); });
-  if(!state.lowThreshold && ps.lowThreshold) state.lowThreshold=ps.lowThreshold;
-  if(!state.leadTime     && ps.leadTime)     state.leadTime=ps.leadTime;
-  if(!state.targetCover  && ps.targetCover)  state.targetCover=ps.targetCover;
-  if(ps._emptySuppliers) state._emptySuppliers=[...new Set([...(state._emptySuppliers||[]),...ps._emptySuppliers])];
-}
-
-/* BI stock block is keyed by normName; map it onto console medicine keys the way
-   applyPrice does, add unknown names as new medicines keyed "n:<norm>", then
-   recompute status from days cover for every item BI gave a stock figure for. */
-function applyBiStock(block) {
-  const items = block && block.items;
-  if (!items) return {matched:0, added:0};
-  buildMeds();
-  const byName={}; meds.forEach(m=> byName[normName(m.name)]=m);
-  const touched=[]; let matched=0, added=0;
-  const known=new Set(state.newMeds.map(n=>n.key));
-  Object.entries(items).forEach(([norm,it])=>{
-    const f={};
-    if(it.stock!=null) f.stock=Number(it.stock);
-    if(it.price!=null) f.price=Number(it.price);
-    if(it.bonus!=null && it.bonus!=='') f.bonus=String(it.bonus);
-    if(it.expiry) f.expiry=String(it.expiry);
-    const m=byName[norm];
-    let key;
-    if(m){ key=m.key; matched++; }
-    else {
-      key='n:'+norm; added++;
-      if(!known.has(key)){
-        known.add(key);
-        state.newMeds.push({key,name:it.name||norm,status:statusFromStock(f.stock)||"MISCELLANEOUS",isNew:true,stock:f.stock??null,
-          demand:null,daysCover:null,margin:null,sold13m:null,topCustomer:"",topSalesperson:"",
-          expiry:f.expiry??null,price:f.price??null,bonus:f.bonus??null});
-      }
-    }
-    state.fields[key]=Object.assign(state.fields[key]||{},f);
-    if(f.stock!==undefined) touched.push(key);
-  });
-  buildMeds();
-  const byKey={}; meds.forEach(m=> byKey[m.key]=m);
-  touched.forEach(k=>{
-    const m=byKey[k]; if(!m) return;
-    const ns=statusFromDaysCover(m, state.fields[k].stock);
-    if(ns && ns!==statusOf(m)) state.statusOverrides[k]=ns;
-  });
-  return {matched, added};
-}
-
 async function autoSyncFromGitHub() {
-  const url = sessionStorage.getItem('vt_bi_url') || BI_SYNC_DEFAULT;
+  const url = sessionStorage.getItem('vt_gh_url') || GH_SYNC_DEFAULT;
   ghSetSync('syncing', '🔄 Syncing…');
-  const feeds = {};
-  // workflow state first, so BI's Focus data is laid over it
   try {
-    const ps = await (await fetch(GH_SYNC_DEFAULT + '?t=' + Date.now(), {cache:'no-store'})).json();
-    if (ps && typeof ps === 'object') { applyGithubWorkflow(ps); feeds.workflow = 'vitals_state.json'; }
-  } catch(e) { feeds.workflow = 'unavailable'; }
-  try {
-    const bi = await biFetch(url);
-    if (typeof bi !== 'object' || !bi) throw new Error('Invalid JSON');
-    if (bi.mrn && !bi.error && Object.keys(bi.mrn).length) state.mrn = bi.mrn;
-    feeds.mrn = (bi.receipts||0) + ' receipts' + (bi.window ? ', ' + bi.window.join(' to ') : '') + (bi.error ? ' (error)' : '');
-    const sb = bi.sales;
-    if (sb && !sb.error && sb.labels && sb.labels.length && sb.qty) {
-      BI_SALES = {labels: sb.labels, qty: sb.qty};
-      MONTH_LABELS.splice(0, MONTH_LABELS.length, ...biMonthLabels(sb.labels));
-    }
-    feeds.sales = sb ? (sb.rows||0) + ' items' + (sb.window ? ', ' + sb.window.join(' to ') : '') + (sb.error ? ' (error)' : '') : 'none';
-    const st = bi.stock && !bi.stock.error ? applyBiStock(bi.stock) : null;
-    feeds.stock = st ? st.matched + ' matched, ' + st.added + ' only in BI, as of ' +
-      Object.entries(bi.stock.as_of||{}).map(([k,v])=>k+' '+v).join(', ') : 'none';
-    try {
-      const reg = await biFetch(url.replace(/state\.json$/, 'registry.json'));
-      if (reg && !reg.error && Array.isArray(reg.ddc) && reg.ddc.length) state.ddcList = reg.ddc;
-      feeds.registry = reg ? (reg.rows||0) + ' codes' : 'none';
-    } catch(e) { feeds.registry = 'unavailable'; }
+    const bustUrl = url + '?t=' + Date.now();
+    const resp = await fetch(bustUrl, {cache:'no-store'});
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const json = await resp.json();
+    if (typeof json !== 'object' || !json) throw new Error('Invalid JSON');
+    // Apply as merge (matching applyState merge branch, no DOM dependency)
+    const ps = json;
+    state.remarks        = Object.assign({}, state.remarks,        ps.remarks||{});
+    state.statusOverrides= Object.assign({}, state.statusOverrides,ps.statusOverrides||{});
+    state.fields         = Object.assign({}, state.fields,         ps.fields||{});
+    const inc = ps.suppliers||{};
+    Object.entries(inc).forEach(([k,qs])=>{
+      if(!state.suppliers[k]) state.suppliers[k]=qs;
+      else qs.forEach(q=>{
+        const i=state.suppliers[k].findIndex(x=>(x.supplier||'').toLowerCase()===(q.supplier||'').toLowerCase());
+        if(i>=0) state.suppliers[k][i]=q; else state.suppliers[k].push(q);
+      });
+    });
+    const existKeys=new Set(state.newMeds.map(n=>n.key));
+    (ps.newMeds||[]).forEach(n=>{ if(!existKeys.has(n.key)) state.newMeds.push(n); });
+    if(ps.mrn) state.mrn=ps.mrn;
+    if(!state.lowThreshold && ps.lowThreshold) state.lowThreshold=ps.lowThreshold;
+    if(!state.leadTime     && ps.leadTime)     state.leadTime=ps.leadTime;
+    if(!state.targetCover  && ps.targetCover)  state.targetCover=ps.targetCover;
+    if(ps._emptySuppliers) state._emptySuppliers=[...new Set([...(state._emptySuppliers||[]),...ps._emptySuppliers])];
     page=1; buildMeds(); scheduleSave(); render();
     const t=new Date(); const hh=String(t.getHours()).padStart(2,'0'), mm=String(t.getMinutes()).padStart(2,'0');
     ghSetSync('ok', '✅ Synced '+hh+':'+mm);
-    const pill = document.getElementById('syncPill');
-    if (pill) pill.title = Object.entries(feeds).map(([k,v])=>k+': '+v).join('\n');
   } catch(e) {
-    if (feeds.workflow === 'vitals_state.json') { page=1; buildMeds(); scheduleSave(); render(); }
-    if (e.message === 'signin') ghSetSync('err', '⚠ Sign in to BI to sync — click to retry');
-    else if (e.message === 'noperm') ghSetSync('err', '⚠ BI account cannot read inventory — click to retry');
-    else ghSetSync('err', '⚠ Sync failed — click to retry');
+    ghSetSync('err', '⚠ Sync failed — click to retry');
   }
 }
 
-// Inject the BI Live Sync card only when renderDataManagement() runs
+// Inject GitHub Auto-Sync card only when renderDataManagement() runs
 (function(){
   const _orig = window.renderDataManagement;
   window.renderDataManagement = function() {
@@ -17803,17 +17700,17 @@ async function autoSyncFromGitHub() {
     const gc=document.getElementById('groups');
     const dash=gc&&gc.querySelector('.dash');
     if(!dash) return;
-    const savedUrl=(sessionStorage.getItem('vt_bi_url')||BI_SYNC_DEFAULT).replace(/"/g,'&quot;');
+    const savedUrl=(sessionStorage.getItem('vt_gh_url')||GH_SYNC_DEFAULT).replace(/"/g,'&quot;');
     const card=document.createElement('div');
     card.className='dash-card'; card.id='ghSyncCard';
     card.innerHTML=
-      '<h3>🔄 BI Live Sync</h3>'+
+      '<h3>🔄 GitHub Auto-Sync</h3>'+
       '<div class="dm-row">'+
         '<div class="dm-icon">🔗</div>'+
         '<div class="dm-body">'+
-          '<div class="dm-name">BI feed URL</div>'+
-          '<div class="dm-desc">Stock, MRN receipts, monthly sales and the DDC registry load from BI on every page load (sign in to BI first). Remarks, statuses and quotes still come from the committed state file. Leave the default unless BI runs elsewhere.</div>'+
-          '<input id="ghUrlInput" type="url" placeholder="api/state.json" value="'+savedUrl+'"'+
+          '<div class="dm-name">Raw JSON URL</div>'+
+          '<div class="dm-desc">Paste the raw GitHub URL of your exported state JSON. Once saved, the dashboard silently re-imports it on every page load with no further action needed.</div>'+
+          '<input id="ghUrlInput" type="url" placeholder="https://raw.githubusercontent.com/..." value="'+savedUrl+'"'+
           ' style="margin-top:8px;width:100%;box-sizing:border-box;padding:7px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:inherit;font-size:13px">'+
         '</div>'+
         '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">'+
@@ -17824,13 +17721,13 @@ async function autoSyncFromGitHub() {
     dash.appendChild(card);
     document.getElementById('ghSyncSaveBtn').onclick=()=>{
       const val=(document.getElementById('ghUrlInput').value||'').trim();
-      if(val){ sessionStorage.setItem('vt_bi_url',val); ghSetSync('ok','✅ URL saved'); setTimeout(()=>{ const p=document.getElementById('syncPill'); if(p&&p.textContent==='✅ URL saved') p.style.display='none'; },2000); }
-      else { sessionStorage.removeItem('vt_bi_url'); const p=document.getElementById('syncPill'); if(p) p.style.display='none'; }
+      if(val){ sessionStorage.setItem('vt_gh_url',val); ghSetSync('ok','✅ URL saved'); setTimeout(()=>{ const p=document.getElementById('syncPill'); if(p&&p.textContent==='✅ URL saved') p.style.display='none'; },2000); }
+      else { sessionStorage.removeItem('vt_gh_url'); const p=document.getElementById('syncPill'); if(p) p.style.display='none'; }
     };
     document.getElementById('ghTestBtn').onclick=()=>{
       const val=(document.getElementById('ghUrlInput').value||'').trim();
       if(!val){ alert('Enter a URL first'); return; }
-      sessionStorage.setItem('vt_bi_url',val);
+      sessionStorage.setItem('vt_gh_url',val);
       autoSyncFromGitHub();
     };
   };
@@ -18351,17 +18248,14 @@ function siComputeSeason(m) {
   // Use _seasonal flag (true = seasonal but no label → treat as year-round for filtering)
   if (m._seasonal === false) return 'year-round';
   // Derive from sales series:
-  // First 12 months of the series by calendar month (labels can come from BI, so
-  // the start month varies): Winter Oct–Mar, Summer Apr–Sep
+  // MONTH_LABELS: Jun25 Jul Aug Sep Oct Nov Dec Jan26 Feb Mar Apr May Jun26 Jul26
+  // Indices:        0    1   2   3   4   5   6    7    8   9  10   11  12   13
+  // Winter (Oct–Mar): 4,5,6,7,8,9   Summer (Apr–Sep): 0,1,2,3,10,11
   try {
     var s = typeof seriesOf === 'function' ? seriesOf(m) : null;
     if (s && s.length >= 12) {
-      var cal = monthLabelsCalendar(), off = cal.length - s.length;
-      var winter = 0, summer = 0;
-      for (var i = 0; i < 12; i++) {
-        var mo = cal[i + off] ? cal[i + off].month : null;
-        if (mo >= 3 && mo <= 8) summer += (s[i]||0); else winter += (s[i]||0);
-      }
+      var winter = s[4]+s[5]+s[6]+s[7]+s[8]+s[9];
+      var summer = s[0]+s[1]+s[2]+s[3]+(s[10]||0)+(s[11]||0);
       var total = winter + summer;
       if (total > 0) {
         var wRatio = winter / total;
