@@ -1022,6 +1022,7 @@ if (window.pdfjsLib) {
   <input type="file" id="stockUpdateInput" accept=".xlsx,.xls,.csv" style="display:none">
   <input type="file" id="salesImInput" accept=".xlsx,.xls" style="display:none">
   <input type="file" id="poInput" accept=".xlsx,.xls,.csv" style="display:none">
+  <input type="file" id="ddcInput" accept=".xlsx,.xls,.csv" style="display:none">
 </div>
 
 <!-- PO import modal -->
@@ -10539,47 +10540,65 @@ function applyMrn(){
 
 
 /* ============ DDC LIST IMPORT ============ */
+// Accepts the EDE Drug Directory export (ede.gov.ae, .xlsx or .csv) or the older DHA DDC list (.xlsx).
 function handleDdcFile(file){
+  const isCsv = /\.csv$/i.test(file.name);
   const reader = new FileReader();
   reader.onload = e => {
     try{
-      const wb = XLSX.read(e.target.result, {type:"array"});
+      // read CSV as text so UTF-8 (Arabic supplier addresses) isn't mangled
+      const wb = isCsv ? XLSX.read(e.target.result, {type:"string", raw:true}) : XLSX.read(e.target.result, {type:"array"});
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
-      if(rows.length < 2){ toast("DDC file appears empty"); return; }
-      const headers = rows[0].map(c => String(c||"").trim().toUpperCase());
+      if(rows.length < 2){ toast("Drug registry file appears empty"); return; }
+      const headers = rows[0].map(c => String(c||"").replace(/^\uFEFF/,"").trim().toUpperCase());
       const col = h => headers.indexOf(h);
-      const iCode = col("DDC_CODE");
-      const iTrade = col("TRADE_NAME");
-      const iSalt = col("SCIENTIFIC_NAME");
-      const iForm = col("DOSAGE_FORM_PACKAGE");
-      const iPrice = col("PACKAGE_PRICE");
-      const iMfr = col("MANUFACTURER");
-      const iOwner = col("REGISTERED_OWNER");
-      const iStatus = col("STATUS");
-      if(iCode<0 || iTrade<0){ toast("DDC file missing required columns (DDC_CODE, TRADE_NAME)"); return; }
+      const cell = (r,i) => i>=0 ? String(r[i]==null?"":r[i]).trim() : "";
       const list = [];
-      for(let i=1;i<rows.length;i++){
-        const r=rows[i]; if(!r||!r[iCode]) continue;
-        list.push({
-          code:   String(r[iCode]||"").trim(),
-          trade:  String(r[iTrade]||"").trim(),
-          salt:   iSalt>=0  ? String(r[iSalt]||"").trim()  : "",
-          form:   iForm>=0  ? String(r[iForm]||"").trim()  : "",
-          price:  iPrice>=0 ? parseFloat(r[iPrice])||0     : 0,
-          mfr:    iMfr>=0   ? String(r[iMfr]||"").trim()   : "",
-          owner:  iOwner>=0 ? String(r[iOwner]||"").trim() : "",
-          status: iStatus>=0? String(r[iStatus]||"").trim(): "",
-        });
+      let source;
+      if(col("DDC_CODE")>=0 && col("TRADE_NAME")>=0){
+        // DHA DDC list
+        source = "DDC";
+        const iCode=col("DDC_CODE"), iTrade=col("TRADE_NAME"), iSalt=col("SCIENTIFIC_NAME"), iForm=col("DOSAGE_FORM_PACKAGE"),
+              iPrice=col("PACKAGE_PRICE"), iMfr=col("MANUFACTURER"), iOwner=col("REGISTERED_OWNER"), iStatus=col("STATUS");
+        for(let i=1;i<rows.length;i++){
+          const r=rows[i]; if(!r||!r[iCode]) continue;
+          list.push({ code:cell(r,iCode), trade:cell(r,iTrade), salt:cell(r,iSalt), form:cell(r,iForm),
+            price:parseFloat(cell(r,iPrice))||0, mfr:cell(r,iMfr), owner:cell(r,iOwner), status:cell(r,iStatus) });
+        }
+      } else if(col("PRODUCT NAME")>=0 && col("MANUFACTURER")>=0){
+        // EDE Drug Directory: Id, Product Name, Strength, Form, Pack Size, Price (AED), Manufacturer, Supplier Name, ... Status, Ingredients
+        source = "EDE";
+        const iId=col("ID"), iName=col("PRODUCT NAME"), iStr=col("STRENGTH"), iForm=col("FORM"), iPack=col("PACK SIZE"),
+              iPrice=headers.findIndex(h=>h.startsWith("PRICE")), iMfr=col("MANUFACTURER"), iSup=col("SUPPLIER NAME"),
+              iStatus=col("STATUS"), iIng=col("INGREDIENTS");
+        for(let i=1;i<rows.length;i++){
+          const r=rows[i]; if(!r||!cell(r,iName)) continue;
+          const ing=cell(r,iIng), str=cell(r,iStr), form=cell(r,iForm), pack=cell(r,iPack);
+          list.push({
+            code:   cell(r,iId) ? "EDE-"+cell(r,iId) : "",
+            trade:  cell(r,iName),
+            salt:   [ing, str].filter(Boolean).join(" "),
+            form:   form && pack ? form+" ("+pack+")" : (form||pack),
+            price:  parseFloat(cell(r,iPrice).replace(/,/g,""))||0,
+            mfr:    cell(r,iMfr),
+            owner:  cell(r,iSup),
+            status: cell(r,iStatus),
+          });
+        }
+      } else {
+        toast("Unrecognised drug registry file — expected the EDE Drug Directory export (Product Name, Manufacturer…) or a DDC list (DDC_CODE, TRADE_NAME)");
+        return;
       }
+      if(!list.length){ toast("No medicines found in drug registry file"); return; }
       state.ddcList = list;
       state.lastDdcImport = new Date().toISOString().slice(0,10);
       scheduleSave();
       render();
-      toast("DDC imported — " + list.length.toLocaleString() + " medicines from " + new Set(list.map(d=>d.mfr).filter(Boolean)).size + " manufacturers");
-    }catch(err){ toast("DDC import error: "+err.message); }
+      toast(source+" registry imported — " + list.length.toLocaleString() + " medicines from " + new Set(list.map(d=>d.mfr).filter(Boolean)).size + " manufacturers");
+    }catch(err){ toast("Drug registry import error: "+err.message); }
   };
-  reader.readAsArrayBuffer(file);
+  if(isCsv) reader.readAsText(file, "utf-8"); else reader.readAsArrayBuffer(file);
 }
 
 /* ============ IMPORT ============ */
@@ -10887,7 +10906,7 @@ function renderDataManagement(){
   html+=`<div class="dash-card"><h3>📅 Daily updates</h3>
     <div class="dm-row" data-dm="price"><div class="dm-icon">☀</div><div class="dm-body"><div class="dm-name">Update from price list</div><div class="dm-desc">Refresh stock, price, bonus, and expiry from your daily price list export.</div></div><div class="dm-last">Last: ${esc(lastPrice)}</div><button class="btn primary dm-btn" data-dmbtn="price">Import</button></div>
     <div class="dm-row" data-dm="po"><div class="dm-icon">📋</div><div class="dm-body"><div class="dm-name">Import purchase order</div><div class="dm-desc">Upload a PO file to auto-mark items as Ordered with supplier, quantity, and date.</div></div><div class="dm-last"></div><button class="btn primary dm-btn" data-dmbtn="po">Import</button></div>
-    <div class="dm-row" data-dm="ddc"><div class="dm-icon">&#x1F48A;</div><div class="dm-body"><div class="dm-name">Import DDC List</div><div class="dm-desc">Import Dubai Drug Code registry &mdash; enables manufacturer tab and DDC cross-referencing. One-time import, stored in state.</div></div><div class="dm-last" id="lastDdcLbl"></div><button class="btn primary dm-btn" data-dmbtn="ddc">Import</button></div>
+    <div class="dm-row" data-dm="ddc"><div class="dm-icon">&#x1F48A;</div><div class="dm-body"><div class="dm-name">Import DDC List</div><div class="dm-desc">Import the drug registry (Excel or CSV) &mdash; the EDE Drug Directory export from ede.gov.ae or the older DHA DDC list. Enables manufacturer tab and DDC cross-referencing. One-time import, stored in state.</div></div><div class="dm-last" id="lastDdcLbl"></div><button class="btn primary dm-btn" data-dmbtn="ddc">Import</button></div>
     <div class="dm-row" data-dm="mrn"><div class="dm-icon">⇊</div><div class="dm-body"><div class="dm-name">Import MRN register</div><div class="dm-desc">Reconcile goods received against open orders — auto-updates Ordered → Received.</div></div><div class="dm-last">Last: ${esc(lastMrn)}</div><button class="btn primary dm-btn" data-dmbtn="mrn">Import</button></div>
   </div>`;
   html+=`<div class="dash-card"><h3>📈 Periodic updates</h3>
@@ -17550,12 +17569,13 @@ async function init(){
   // MRN register import
   document.getElementById("mrnBtn").onclick=()=>document.getElementById("mrnInput").click();
   document.getElementById("mrnInput").onchange=e=>{
-    if(e.target.files[0]){ setMrnNote("Reading register…");
-document.getElementById('ddcInput').onchange=function(e){ if(e.target.files[0]){ handleDdcFile(e.target.files[0]); e.target.value=''; } }; document.getElementById("mrnApply").disabled=true;
+    if(e.target.files[0]){ setMrnNote("Reading register…"); document.getElementById("mrnApply").disabled=true;
       pendingMrn=null; lastMrnParse=null; document.getElementById("mrnScrim").classList.add("show");
       handleMrnFile(e.target.files[0]); e.target.value=""; }
   };
   document.getElementById("mrnCancel").onclick=()=>document.getElementById("mrnScrim").classList.remove("show");
+  // DDC / EDE drug registry import
+  document.getElementById("ddcInput").onchange=e=>{ if(e.target.files[0]){ handleDdcFile(e.target.files[0]); e.target.value=""; } };
   document.getElementById("mrnApply").onclick=applyMrn;
   // MRN mode toggle
   document.querySelectorAll("[data-mrnmode]").forEach(b=> b.onclick=()=>{
@@ -22348,6 +22368,5 @@ function fiSendAutoReply(issueId, btn){
 
 
 </script>
-<input type="file" id="ddcInput" accept=".xlsx" style="display:none">
 </body>
 </html>
